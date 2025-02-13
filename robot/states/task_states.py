@@ -5,7 +5,8 @@ class TaskCreation(StatesGroup):
     waiting_for_title = State()
     waiting_for_description = State()
     waiting_for_deadline = State()
-    waiting_for_assignee = State()
+    waiting_for_assignment_type = State()  # индивидуальная или групповая
+    waiting_for_assignee = State()  # только для индивидуальных
     waiting_for_media = State()
     confirm_creation = State()
 

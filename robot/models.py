@@ -43,7 +43,8 @@ class BotText(models.Model):
 
 class Task(models.Model):
     STATUS_CHOICES = [
-        ('open', 'Open'),
+        ('open', 'Open'),  # Открытая задача, доступная для взятия
+        ('assigned', 'Assigned'),  # Назначена конкретному исполнителю
         ('in_progress', 'In Progress'),
         ('completed', 'Completed'),
         ('overdue', 'Overdue'),
