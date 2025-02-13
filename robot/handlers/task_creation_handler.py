@@ -1,13 +1,15 @@
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from datetime import datetime
+import os
 from ..keyboards.task_creation_keyboards import (
     get_assignment_type_keyboard,
     get_users_keyboard,
     get_media_keyboard,
     get_confirm_keyboard
 )
+from ..keyboards.task_keyboards import get_task_action_keyboard, get_open_task_keyboard, get_group_task_keyboard, get_personal_task_keyboard
 from ..states.task_states import TaskCreation
 from ..models import Task, TelegramUser
 from ..utils import identify_user
@@ -118,21 +120,12 @@ async def skip_media(callback: CallbackQuery, state: FSMContext):
 async def show_confirmation(message: Message, state: FSMContext):
     data = await state.get_data()
     
-    task_type = "Групповая" if data.get('is_group_task') else "Индивидуальная"
-    if not data.get('is_group_task'):
-        if data.get('is_open_task'):
-            task_type += " (Открытая для выполнения)"
-        elif data.get('assignee_id'):
-            assignee = await get_user_name(data['assignee_id'])
-            task_type += f" (Исполнитель: {assignee})"
-    
     confirmation_text = (
         "📋 Подтвердите создание задачи:\n\n"
         f"📝 Название: {data['title']}\n"
         f"📄 Описание: {data['description']}\n"
         f"📅 Дедлайн: {data['deadline'].strftime('%d.%m.%Y %H:%M')}\n"
-        f"👥 Тип: {task_type}\n"
-        f"📎 Медиафайл: {'Прикреплён' if data.get('media_file_id') else 'Отсутствует'}"
+        f"👥 Тип: {'Групповая' if data.get('is_group_task') else 'Индивидуальная'}\n"
     )
     
     keyboard = get_confirm_keyboard()
@@ -140,13 +133,48 @@ async def show_confirmation(message: Message, state: FSMContext):
     await message.answer(confirmation_text, reply_markup=keyboard)
 
 
-@sync_to_async
-def get_user_name(telegram_id: int) -> str:
-    try:
-        user = TelegramUser.objects.get(telegram_id=telegram_id)
-        return user.first_name
-    except TelegramUser.DoesNotExist:
-        return "Неизвестный пользователь"
+async def send_task_notification(bot: Bot, task: Task, data: dict):
+    group_id = os.getenv("TELEGRAM_GROUP_ID")
+    bot_username = os.getenv("TELEGRAM_BOT_USERNAME")
+    
+    # Формируем базовый текст задачи
+    task_text = (
+        f"📋 Новая задача: {task.title}\n\n"
+        f"📝 Описание: {task.description}\n"
+        f"📅 Дедлайн: {task.deadline.strftime('%d.%m.%Y %H:%M')}\n"
+        f"👤 Создал: {task.creator.first_name}"
+    )
+
+    # Для открытой задачи
+    if data.get('is_open_task'):
+        task_type = "🔓 Открытая задача"
+        group_text = f"{task_type}\n\n{task_text}"
+        keyboard = get_open_task_keyboard(task.id)
+        message = await bot.send_message(group_id, group_text, reply_markup=keyboard)
+    
+    # Для групповой задачи
+    elif task.is_group_task:
+        task_type = "👥 Групповая задача"
+        group_text = f"{task_type}\n\n{task_text}"
+        keyboard = await get_group_task_keyboard(bot)
+        message = await bot.send_message(group_id, group_text, reply_markup=keyboard)
+    
+    # Для индивидуальной задачи с назначенным исполнителем
+    elif task.assignee:
+        personal_text = (
+            f"👤 Вам назначена новая задача!\n\n{task_text}\n\n"
+            "Пожалуйста, ознакомьтесь и приступите к выполнению."
+        )
+        keyboard = get_personal_task_keyboard()
+        message = await bot.send_message(task.assignee.telegram_id, personal_text, reply_markup=keyboard)
+    
+    # Отправляем медиафайл, если есть
+    if task.media_file_id:
+        chat_id = group_id if (task.is_group_task or data.get('is_open_task')) else task.assignee.telegram_id
+        if data.get('media_type') == 'photo':
+            await bot.send_photo(chat_id, task.media_file_id)
+        else:
+            await bot.send_video(chat_id, task.media_file_id)
 
 
 @task_creation_router.callback_query(F.data == "confirm_task")
@@ -154,40 +182,45 @@ async def create_task(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     creator, _ = await identify_user(callback.from_user.id)
     
-    @sync_to_async
-    def save_task():
-        assignee = None
-        if not data.get('is_group_task') and data.get('assignee_id'):
-            assignee = TelegramUser.objects.get(telegram_id=data['assignee_id'])
-        
-        task = Task.objects.create(
-            title=data['title'],
-            description=data['description'],
-            creator=creator,
-            assignee=assignee,
-            is_group_task=data.get('is_group_task', False),
-            deadline=data['deadline'],
-            media_file_id=data.get('media_file_id'),
-            status='open' if data.get('is_open_task') else 'assigned'
-        )
-        return task
-
-    task = await save_task()
+    task = await save_task(creator, data)
     
-    # Формируем текст уведомления
+    # Отправляем уведомления
+    bot = callback.bot
+    await send_task_notification(bot, task, data)
+    
+    # Формируем текст подтверждения для создателя
     task_type = "групповая" if task.is_group_task else "индивидуальная"
     if not task.is_group_task and data.get('is_open_task'):
         task_type += " (открыта для выполнения)"
     
-    notification_text = (
+    confirmation_text = (
         f"✅ Задача '{task.title}' успешно создана!\n"
         f"Тип: {task_type}\n"
         f"Дедлайн: {task.deadline.strftime('%d.%m.%Y %H:%M')}"
     )
     
     await state.clear()
-    await callback.message.edit_text(notification_text)
+    await callback.message.edit_text(confirmation_text)
     await callback.answer()
+
+
+@sync_to_async
+def save_task(creator, data):
+    assignee = None
+    if not data.get('is_group_task') and data.get('assignee_id'):
+        assignee = TelegramUser.objects.get(telegram_id=data['assignee_id'])
+    
+    task = Task.objects.create(
+        title=data['title'],
+        description=data['description'],
+        creator=creator,
+        assignee=assignee,
+        is_group_task=data.get('is_group_task', False),
+        deadline=data['deadline'],
+        media_file_id=data.get('media_file_id'),
+        status='open' if data.get('is_open_task') else 'assigned'
+    )
+    return task
 
 
 @task_creation_router.callback_query(F.data == "cancel_creation")
