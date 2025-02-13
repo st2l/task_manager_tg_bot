@@ -1,11 +1,14 @@
 import os
 
 from django.core.management.base import BaseCommand, CommandError
+from dotenv import load_dotenv
 
 from aiogram import Dispatcher, Bot
 from robot.handlers import router
 import asyncio
 import logging
+
+load_dotenv()
 
 class Command(BaseCommand):
     help = 'RUN COMMAND: python manage.py runbot'

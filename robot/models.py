@@ -1,15 +1,19 @@
 from django.db import models
+from django.utils import timezone
 
 
 class TelegramUser(models.Model):
     telegram_id = models.BigIntegerField(unique=True)
     first_name = models.CharField(max_length=255)
+    username = models.CharField(max_length=255, blank=True, null=True)
     is_bot = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    is_admin = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
     last_login = models.DateTimeField(auto_now=True)
     date_joined = models.DateTimeField(auto_now_add=True)
+    notification_enabled = models.BooleanField(default=True)
 
     def identify_user(self, telegram_id) -> tuple["TelegramUser", bool]:
         try:
@@ -19,7 +23,7 @@ class TelegramUser(models.Model):
             return self.objects.get(telegram_id=telegram_id), True
 
     def __str__(self):
-        return self.first_name
+        return f"{self.first_name} ({self.telegram_id})"
 
 
 class BotText(models.Model):
@@ -35,3 +39,50 @@ class BotText(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Task(models.Model):
+    STATUS_CHOICES = [
+        ('open', 'Open'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('overdue', 'Overdue'),
+    ]
+
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    creator = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='created_tasks')
+    assignee = models.ForeignKey(TelegramUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_tasks')
+    is_group_task = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    deadline = models.DateTimeField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
+    completed_at = models.DateTimeField(null=True, blank=True)
+    media_file_id = models.CharField(max_length=255, blank=True, null=True)
+    
+    def __str__(self):
+        return self.title
+    
+    def mark_completed(self):
+        self.status = 'completed'
+        self.completed_at = timezone.now()
+        self.save()
+
+
+class TaskComment(models.Model):
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='comments')
+    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE)
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Comment on {self.task.title} by {self.user.first_name}"
+
+
+class Reminder(models.Model):
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='reminders')
+    reminder_time = models.DateTimeField()
+    is_sent = models.BooleanField(default=False)
+    
+    def __str__(self):
+        return f"Reminder for {self.task.title} at {self.reminder_time}"
