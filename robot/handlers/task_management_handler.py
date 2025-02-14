@@ -2,7 +2,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from ..utils import identify_user
-from ..models import Task, TaskCompletion, TelegramUser
+from ..models import Task, TaskCompletion, TelegramUser, TaskComment
 from ..keyboards.task_list_keyboards import get_task_list_keyboard, get_task_detail_keyboard, get_task_list_open_keyboard, get_open_task_detail_keyboard, get_user_filter_keyboard
 from asgiref.sync import sync_to_async
 from ..states.task_states import TaskSubmission
@@ -17,7 +17,7 @@ task_management_router = Router()
 @sync_to_async
 def get_user_tasks(user):
     return list(Task.objects.filter(
-        (models.Q(assignee=user) & ~models.Q(status='open')) |
+        (models.Q(assignee=user) & ~models.Q(status__in=['open', 'completed'])) |
         (models.Q(is_group_task=True) & models.Q(status='in_progress'))
     ))
 
@@ -95,6 +95,24 @@ def get_user_filtered_tasks(user_id):
     ).order_by('-created_at'))
 
 
+@sync_to_async
+def get_user_completed_tasks(user):
+    return list(Task.objects.filter(
+        assignee=user,
+        status='completed'
+    ).order_by('-completed_at'))
+
+
+@sync_to_async
+def get_user_overdue_tasks(user):
+    now = timezone.now()
+    return list(Task.objects.filter(
+        assignee=user,
+        status__in=['in_progress', 'assigned', 'overdue'],
+        deadline__lt=now
+    ).order_by('deadline'))
+
+
 @task_management_router.callback_query(F.data.in_(["my_tasks", "all_tasks"]))
 async def show_my_tasks(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
@@ -126,6 +144,19 @@ def get_assignee_text(task: Task):
     else:
         return ""
 
+@sync_to_async
+def get_task_comment(task: Task):
+    if task.comments.count() > 0:
+        return TaskComment.objects.filter(task=task).order_by('-created_at').first().text
+    else:
+        return ""
+
+@sync_to_async
+def get_task_assignee(task: Task):
+    if task.assignee:
+        return task.assignee.first_name
+    else:
+        return ""
 
 @task_management_router.callback_query(F.data.startswith("view_task:"))
 async def view_task_details(callback: CallbackQuery, state: FSMContext):
@@ -139,6 +170,12 @@ async def view_task_details(callback: CallbackQuery, state: FSMContext):
     if user.is_admin:
         if task.is_group_task and completions_count is not None:
             task_text += f"✅ Выполнили: {completions_count} человек\n"
+        if task.status == 'completed':
+            task_text += f"✅ Задание выполнено\n"
+
+            comment = await get_task_comment(task)
+            if comment:
+                task_text += f"💬 Комментарий: {comment}\n"
 
     asignee = await get_assignee_text(task)
     if asignee:
@@ -179,6 +216,11 @@ async def start_task_submission(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
+@sync_to_async
+def create_task_comment(task_id, user, comment):
+    task = Task.objects.get(id=task_id)
+    TaskComment.objects.create(task=task, user=user, text=comment)
+    return task
 
 @task_management_router.message(TaskSubmission.waiting_for_comment)
 async def process_submission_comment(message: Message, state: FSMContext):
@@ -191,6 +233,8 @@ async def process_submission_comment(message: Message, state: FSMContext):
         task = await create_task_completion(task_id, user, message.text)
     else:
         task = await complete_individual_task(task_id)
+
+    await create_task_comment(task_id, user, message.text)
 
     await message.answer("✅ Задание успешно сдано!")
     await state.clear()
@@ -363,4 +407,22 @@ async def show_overdue_tasks(callback: CallbackQuery, state: FSMContext):
     tasks = await get_overdue_tasks()
     keyboard = get_task_list_keyboard(tasks)
     await callback.message.edit_text("⏰ Просроченные задачи:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data == "user_completed_tasks")
+async def show_user_completed_tasks(callback: CallbackQuery, state: FSMContext):
+    user, _ = await identify_user(callback.from_user.id)
+    tasks = await get_user_completed_tasks(user)
+    keyboard = get_task_list_keyboard(tasks)
+    await callback.message.edit_text("✅ Мои выполненные задачи:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data == "user_overdue_tasks")
+async def show_user_overdue_tasks(callback: CallbackQuery, state: FSMContext):
+    user, _ = await identify_user(callback.from_user.id)
+    tasks = await get_user_overdue_tasks(user)
+    keyboard = get_task_list_keyboard(tasks)
+    await callback.message.edit_text("⏰ Мои просроченные задачи:", reply_markup=keyboard)
     await callback.answer()
