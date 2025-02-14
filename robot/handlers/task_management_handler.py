@@ -12,6 +12,7 @@ from django.db import models
 from ..utils.message_utils import safe_edit_message, send_task_message
 from ..utils.logger import logger
 import logging
+from aiogram.fsm.state import State, StatesGroup
 
 task_management_router = Router()
 
@@ -249,62 +250,149 @@ async def take_task(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Задача уже взята в работу другим пользователем!")
 
 
+class TaskStates(StatesGroup):
+    waiting_for_comment = State()
+
+
 @task_management_router.callback_query(F.data.startswith("submit_task:"))
-async def start_task_submission(callback: CallbackQuery, state: FSMContext):
-    task_id = int(callback.data.split(":")[1])
-    await state.update_data(task_id=task_id)
-    await state.set_state(TaskSubmission.waiting_for_comment)
+async def submit_task(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info(f"User {user_id} attempting to submit task")
+    
+    try:
+        task_id = int(callback.data.split(":")[1])
+        await state.update_data(task_id=task_id)
+        
+        # Ask for comment
+        keyboard = InlineKeyboardBuilder()
+        keyboard.button(text="⏩ Пропустить", callback_data="skip_comment")
+        await callback.message.edit_text(
+            "💬 Пожалуйста, напишите комментарий к выполненному заданию\n"
+            "или нажмите «Пропустить», если комментарий не требуется.",
+            reply_markup=keyboard.as_markup()
+        )
+        await state.set_state(TaskStates.waiting_for_comment)
+        await callback.answer()
+        logger.info(f"Waiting for comment from user {user_id} for task {task_id}")
+        
+    except Exception as e:
+        logger.error(f"Error in submit_task for user {user_id}: {str(e)}", exc_info=True)
+        await callback.answer("❌ Произошла ошибка при выполнении задачи")
 
-    keyboard = InlineKeyboardBuilder()
-    keyboard.button(text="⏩ Пропустить", callback_data="skip_comment")
-    keyboard.button(text="❌ Отмена", callback_data="cancel_submission")
 
-    await callback.message.edit_text(
-        "💬 Хотите добавить комментарий к выполненному заданию?\n"
-        "Напишите комментарий или нажмите «Пропустить»",
-        reply_markup=keyboard.as_markup()
-    )
-    await callback.answer()
-
-@sync_to_async
-def create_task_comment(task_id, user, comment):
-    task = Task.objects.get(id=task_id)
-    TaskComment.objects.create(task=task, user=user, text=comment)
-    return task
-
-@task_management_router.message(TaskSubmission.waiting_for_comment)
-async def process_submission_comment(message: Message, state: FSMContext):
-    data = await state.get_data()
-    task_id = data['task_id']
-    user, _ = await identify_user(message.from_user.id)
-
-    task, _ = await get_task_with_completions(task_id)
-    if task.is_group_task:
-        task = await create_task_completion(task_id, user, message.text)
-    else:
-        task = await complete_individual_task(task_id)
-
-    await create_task_comment(task_id, user, message.text)
-
-    await message.answer("✅ Задание успешно сдано!")
-    await state.clear()
+@task_management_router.message(TaskStates.waiting_for_comment)
+async def handle_task_comment(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    logger.info(f"Received comment from user {user_id}")
+    
+    try:
+        data = await state.get_data()
+        task_id = data['task_id']
+        user, _ = await identify_user(user_id)
+        
+        @sync_to_async
+        def complete_task_with_comment(comment):
+            task = Task.objects.get(id=task_id)
+            task.mark_completed()
+            TaskComment.objects.create(
+                task=task,
+                user=user,
+                text=comment
+            )
+            return task
+            
+        @sync_to_async
+        def get_admins():
+            return list(TelegramUser.objects.filter(is_admin=True, notification_enabled=True))
+        
+        task = await complete_task_with_comment(message.text)
+        admins = await get_admins()
+        
+        # Send notifications to admins
+        notification_text = (
+            f"✅ Задача выполнена!\n"
+            f"Название: {task.title}\n"
+            f"Исполнитель: {user.first_name}\n"
+            f"Время выполнения: {task.completed_at.strftime('%d.%m.%Y %H:%M')}\n"
+            f"💬 Комментарий: {message.text}"
+        )
+        
+        for admin in admins:
+            try:
+                await message.bot.send_message(admin.telegram_id, notification_text)
+                logger.info(f"Sent completion notification to admin {admin.telegram_id}")
+            except Exception as e:
+                logger.error(f"Failed to send notification to admin {admin.telegram_id}: {e}")
+        
+        # Update task view
+        task_text = await get_text_with_details(task)
+        keyboard = get_task_detail_keyboard(task_id, user.is_admin, 'completed')
+        await message.answer(
+            f"✅ Задача отмечена как выполненная!\n{task_text}",
+            reply_markup=keyboard
+        )
+        await state.clear()
+        logger.info(f"Task {task_id} marked as completed with comment by user {user_id}")
+        
+    except Exception as e:
+        logger.error(f"Error in handle_task_comment for user {user_id}: {str(e)}", exc_info=True)
+        await message.answer("❌ Произошла ошибка при сохранении комментария")
+        await state.clear()
 
 
 @task_management_router.callback_query(F.data == "skip_comment")
-async def skip_submission_comment(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    task_id = data['task_id']
-    user, _ = await identify_user(callback.from_user.id)
-
-    task, _ = await get_task_with_completions(task_id)
-    if task.is_group_task:
-        task = await create_task_completion(task_id, user)
-    else:
-        task = await complete_individual_task(task_id)
-
-    await callback.message.edit_text("✅ Задание успешно сдано!")
-    await state.clear()
-    await callback.answer()
+async def skip_task_comment(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info(f"User {user_id} skipped comment")
+    
+    try:
+        data = await state.get_data()
+        task_id = data['task_id']
+        user, _ = await identify_user(user_id)
+        
+        @sync_to_async
+        def complete_task():
+            task = Task.objects.get(id=task_id)
+            task.mark_completed()
+            return task
+            
+        @sync_to_async
+        def get_admins():
+            return list(TelegramUser.objects.filter(is_admin=True, notification_enabled=True))
+        
+        task = await complete_task()
+        admins = await get_admins()
+        
+        # Send notifications to admins
+        notification_text = (
+            f"✅ Задача выполнена!\n"
+            f"Название: {task.title}\n"
+            f"Исполнитель: {user.first_name}\n"
+            f"Время выполнения: {task.completed_at.strftime('%d.%m.%Y %H:%M')}"
+        )
+        
+        for admin in admins:
+            try:
+                await callback.bot.send_message(admin.telegram_id, notification_text)
+                logger.info(f"Sent completion notification to admin {admin.telegram_id}")
+            except Exception as e:
+                logger.error(f"Failed to send notification to admin {admin.telegram_id}: {e}")
+        
+        # Update task view
+        task_text = await get_text_with_details(task)
+        keyboard = get_task_detail_keyboard(task_id, user.is_admin, 'completed')
+        await callback.message.edit_text(
+            f"✅ Задача отмечена как выполненная!\n{task_text}",
+            reply_markup=keyboard
+        )
+        await state.clear()
+        await callback.answer()
+        logger.info(f"Task {task_id} marked as completed without comment by user {user_id}")
+        
+    except Exception as e:
+        logger.error(f"Error in skip_task_comment for user {user_id}: {str(e)}", exc_info=True)
+        await callback.answer("❌ Произошла ошибка при выполнении задачи")
+        await state.clear()
 
 
 @task_management_router.callback_query(F.data == "cancel_submission")
