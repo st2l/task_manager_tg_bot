@@ -41,7 +41,7 @@ def get_completed_tasks():
 def get_overdue_tasks():
     now = timezone.now()
     return list(Task.objects.filter(
-        models.Q(status__in=['open', 'in_progress', 'assigned']) &
+        models.Q(status__in=['open', 'in_progress', 'assigned', 'overdue']) &
         models.Q(deadline__lt=now)
     ).order_by('deadline'))
 
@@ -113,16 +113,54 @@ def get_user_overdue_tasks(user):
     ).order_by('deadline'))
 
 
-@task_management_router.callback_query(F.data.in_(["my_tasks", "all_tasks"]))
-async def show_my_tasks(callback: CallbackQuery, state: FSMContext):
+@task_management_router.callback_query(F.data.in_(["my_tasks", "user_completed_tasks", "user_overdue_tasks"]))
+async def handle_task_list_navigation(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(last_view=callback.data)
     user, _ = await identify_user(callback.from_user.id)
-    if user.is_admin:
-        tasks = await get_admin_task_list()
-    else:
-        tasks = await get_user_tasks(user)
-
+    
+    @sync_to_async
+    def get_tasks_by_type(task_type: str, is_admin: bool):
+        if is_admin:
+            if task_type == "my_tasks":
+                return list(Task.objects.filter(
+                    status__in=['in_progress', 'assigned', 'overdue']
+                ).order_by('-created_at'))
+            elif task_type == "user_completed_tasks":
+                return list(Task.objects.filter(
+                    status='completed'
+                ).order_by('-completed_at'))
+            else:  # user_overdue_tasks
+                return list(Task.objects.filter(
+                    status='overdue'
+                ).order_by('deadline'))
+        else:
+            if task_type == "my_tasks":
+                return list(Task.objects.filter(
+                    assignee=user,
+                    status__in=['in_progress', 'assigned', 'overdue']
+                ).order_by('-created_at'))
+            elif task_type == "user_completed_tasks":
+                return list(Task.objects.filter(
+                    assignee=user,
+                    status='completed'
+                ).order_by('-completed_at'))
+            else:  # user_overdue_tasks
+                return list(Task.objects.filter(
+                    assignee=user,
+                    status='overdue'
+                ).order_by('deadline'))
+    
+    tasks = await get_tasks_by_type(callback.data, user.is_admin)
+    
+    if callback.data == "my_tasks":
+        text = "📋 Все активные задачи:" if user.is_admin else "📋 Мои задачи:"
+    elif callback.data == "user_completed_tasks":
+        text = "✅ Все выполненные задачи:" if user.is_admin else "✅ Мои выполненные задачи:"
+    else:  # user_overdue_tasks
+        text = "⏰ Все просроченные задачи:" if user.is_admin else "⏰ Мои просроченные задачи:"
+    
     keyboard = get_task_list_keyboard(tasks)
-    await safe_edit_message(callback.message, "📋 Ваши задачи:", keyboard)
+    await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
 
 
@@ -266,7 +304,7 @@ async def cancel_submission(callback: CallbackQuery, state: FSMContext):
     if task_id:
         await view_task_details(callback, state)
     else:
-        await show_my_tasks(callback, state)
+        await handle_task_list_navigation(callback, state)
 
 
 @task_management_router.callback_query(F.data == "back_to_task_list")
@@ -410,19 +448,10 @@ async def show_overdue_tasks(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@task_management_router.callback_query(F.data == "user_completed_tasks")
-async def show_user_completed_tasks(callback: CallbackQuery, state: FSMContext):
-    user, _ = await identify_user(callback.from_user.id)
-    tasks = await get_user_completed_tasks(user)
-    keyboard = get_task_list_keyboard(tasks)
-    await callback.message.edit_text("✅ Мои выполненные задачи:", reply_markup=keyboard)
-    await callback.answer()
-
-
-@task_management_router.callback_query(F.data == "user_overdue_tasks")
-async def show_user_overdue_tasks(callback: CallbackQuery, state: FSMContext):
-    user, _ = await identify_user(callback.from_user.id)
-    tasks = await get_user_overdue_tasks(user)
-    keyboard = get_task_list_keyboard(tasks)
-    await callback.message.edit_text("⏰ Мои просроченные задачи:", reply_markup=keyboard)
+@task_management_router.callback_query(F.data == "available_tasks")
+async def show_available_tasks(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(last_view=callback.data)
+    tasks = await get_open_tasks()
+    keyboard = get_task_list_keyboard(tasks, is_open_tasks=True)
+    await callback.message.edit_text("🔓 Доступные задачи:", reply_markup=keyboard)
     await callback.answer()

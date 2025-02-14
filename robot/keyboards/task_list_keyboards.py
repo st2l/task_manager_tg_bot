@@ -26,7 +26,7 @@ def get_task_list_open_keyboard(tasks, page=1, items_per_page=5) -> InlineKeyboa
     return builder.as_markup()
 
 
-def get_task_list_keyboard(tasks, page=1, items_per_page=5) -> InlineKeyboardMarkup:
+def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=False) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
     start_idx = (page - 1) * items_per_page
@@ -37,7 +37,7 @@ def get_task_list_keyboard(tasks, page=1, items_per_page=5) -> InlineKeyboardMar
         if task.status == 'overdue':
             status_emoji = "⏰"
         builder.button(
-            text=f"{status_emoji} {task.title[:30]}...",
+            text=f"{status_emoji} {task.title}",
             callback_data=f"view_task:{task.id}"
         )
     
@@ -53,11 +53,15 @@ def get_task_list_keyboard(tasks, page=1, items_per_page=5) -> InlineKeyboardMar
     if nav_buttons:
         builder.row(*nav_buttons)
     
-    # Add filter buttons for regular users
-    builder.button(text="📋 Текущие задачи", callback_data="my_tasks")
-    builder.button(text="✅ Выполненные", callback_data="user_completed_tasks")
-    builder.button(text="⏰ Просроченные", callback_data="user_overdue_tasks")
-    builder.button(text="◀️ Назад", callback_data="back_to_main")
+    # Add filter buttons based on context
+    if is_open_tasks:
+        builder.button(text="◀️ Назад", callback_data="back_to_main")
+    else:
+        builder.button(text="📋 Текущие задачи", callback_data="my_tasks")
+        builder.button(text="✅ Выполненные", callback_data="user_completed_tasks")
+        builder.button(text="⏰ Просроченные", callback_data="user_overdue_tasks")
+        builder.button(text="◀️ Назад", callback_data="back_to_main")
+    
     builder.adjust(1)
     return builder.as_markup()
 
