@@ -11,6 +11,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from django.db import models
 from ..utils.message_utils import safe_edit_message, send_task_message
 from ..utils.logger import logger
+import logging
 
 task_management_router = Router()
 
@@ -474,4 +475,13 @@ async def show_user_overdue_tasks(callback: CallbackQuery, state: FSMContext):
     tasks = await get_user_overdue_tasks(user)
     keyboard = get_task_list_keyboard(tasks)
     await callback.message.edit_text("⏰ Мои просроченные задачи:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data == "my_tasks")
+async def show_my_tasks(callback: CallbackQuery, state: FSMContext):
+    user, _ = await identify_user(callback.from_user.id)
+    tasks = await get_user_tasks(user)
+    keyboard = get_task_list_keyboard(tasks)
+    await callback.message.edit_text("📋 Мои задачи:", reply_markup=keyboard)
     await callback.answer()
