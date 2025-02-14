@@ -13,7 +13,7 @@ from ..keyboards.admin_keyboards import (
     get_user_stats_keyboard
 )
 from django.utils import timezone
-import logging
+from ..utils.logger import logger
 
 admin_router = Router()
 
@@ -31,40 +31,51 @@ async def handle_admin_tasks(callback: CallbackQuery):
 
 @admin_router.callback_query(F.data == "statistics")
 async def handle_admin_statistics(callback: CallbackQuery):
-    user, _ = await identify_user(callback.from_user.id)
+    user_id = callback.from_user.id
+    logger.info(f"Admin {user_id} accessing statistics")
     
-    if not user.is_admin:
-        await callback.answer("У вас нет прав администратора!", show_alert=True)
-        return
+    try:
+        user, _ = await identify_user(user_id)
+        
+        if not user.is_admin:
+            logger.warning(f"Unauthorized statistics access attempt by user {user_id}")
+            await callback.answer("У вас нет прав администратора!", show_alert=True)
+            return
 
-    @sync_to_async
-    def get_statistics():
-        now = datetime.now()
-        return {
-            'total_tasks': Task.objects.count(),
-            'active_tasks': Task.objects.filter(status='in_progress').count(),
-            'completed_tasks': Task.objects.filter(status='completed').count(),
-            'overdue_tasks': Task.objects.filter(
-                status__in=['open', 'in_progress'],
-                deadline__lt=now
-            ).count(),
-            'users_count': TelegramUser.objects.filter(is_active=True).count()
-        }
+        @sync_to_async
+        def get_statistics():
+            now = datetime.now()
+            return {
+                'total_tasks': Task.objects.count(),
+                'active_tasks': Task.objects.filter(status='in_progress').count(),
+                'completed_tasks': Task.objects.filter(status='completed').count(),
+                'overdue_tasks': Task.objects.filter(
+                    status__in=['open', 'in_progress'],
+                    deadline__lt=now
+                ).count(),
+                'users_count': TelegramUser.objects.filter(is_active=True).count()
+            }
 
-    stats = await get_statistics()
-    
-    stats_text = (
-        "📊 Статистика:\n\n"
-        f"📝 Всего задач: {stats['total_tasks']}\n"
-        f"▫️ Активных: {stats['active_tasks']}\n"
-        f"✅ Завершённых: {stats['completed_tasks']}\n"
-        f"⚠️ Просроченных: {stats['overdue_tasks']}\n"
-        f"👥 Активных пользователей: {stats['users_count']}"
-    )
-    
-    keyboard = get_admin_statistics_keyboard()
-    await callback.message.edit_text(stats_text, reply_markup=keyboard)
-    await callback.answer()
+        stats = await get_statistics()
+        logger.info(f"Retrieved statistics: {stats}")
+        
+        stats_text = (
+            "📊 Статистика:\n\n"
+            f"📝 Всего задач: {stats['total_tasks']}\n"
+            f"▫️ Активных: {stats['active_tasks']}\n"
+            f"✅ Завершённых: {stats['completed_tasks']}\n"
+            f"⚠️ Просроченных: {stats['overdue_tasks']}\n"
+            f"👥 Активных пользователей: {stats['users_count']}"
+        )
+        
+        keyboard = get_admin_statistics_keyboard()
+        await callback.message.edit_text(stats_text, reply_markup=keyboard)
+        await callback.answer()
+        logger.info(f"Successfully displayed statistics for admin {user_id}")
+        
+    except Exception as e:
+        logger.error(f"Error in handle_admin_statistics for user {user_id}: {str(e)}", exc_info=True)
+        await callback.answer("Произошла ошибка при загрузке статистики")
 
 @admin_router.callback_query(F.data == "settings")
 async def handle_admin_settings(callback: CallbackQuery):

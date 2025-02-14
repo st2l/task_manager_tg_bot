@@ -4,6 +4,7 @@ from .admin_handler import admin_router
 from .task_creation_handler import task_creation_router
 from .navigation_handler import navigation_router
 from .task_management_handler import task_management_router
+from .report_handler import report_router
 
 router = Router()
 
@@ -12,3 +13,4 @@ router.include_router(admin_router)
 router.include_router(task_creation_router)
 router.include_router(navigation_router)
 router.include_router(task_management_router)
+router.include_router(report_router)
