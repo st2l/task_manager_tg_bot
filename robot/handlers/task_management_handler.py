@@ -1,0 +1,366 @@
+from aiogram import Router, F
+from aiogram.types import CallbackQuery, Message
+from aiogram.fsm.context import FSMContext
+from ..utils import identify_user
+from ..models import Task, TaskCompletion, TelegramUser
+from ..keyboards.task_list_keyboards import get_task_list_keyboard, get_task_detail_keyboard, get_task_list_open_keyboard, get_open_task_detail_keyboard, get_user_filter_keyboard
+from asgiref.sync import sync_to_async
+from ..states.task_states import TaskSubmission
+from django.utils import timezone
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from django.db import models
+from ..utils.message_utils import safe_edit_message, send_task_message
+
+task_management_router = Router()
+
+
+@sync_to_async
+def get_user_tasks(user):
+    return list(Task.objects.filter(
+        (models.Q(assignee=user) & ~models.Q(status='open')) |
+        (models.Q(is_group_task=True) & models.Q(status='in_progress'))
+    ))
+
+
+@sync_to_async
+def get_open_tasks():
+    return list(Task.objects.filter(status='open'))
+
+
+@sync_to_async
+def get_admin_task_list():
+    return list(Task.objects.all().order_by('-created_at'))
+
+
+@sync_to_async
+def get_completed_tasks():
+    return list(Task.objects.filter(status='completed').order_by('-completed_at'))
+
+
+@sync_to_async
+def get_overdue_tasks():
+    now = timezone.now()
+    return list(Task.objects.filter(
+        models.Q(status__in=['open', 'in_progress', 'assigned']) &
+        models.Q(deadline__lt=now)
+    ).order_by('deadline'))
+
+
+@sync_to_async
+def get_task_with_completions(task_id):
+    task = Task.objects.get(id=task_id)
+    if task.is_group_task:
+        completions_count = TaskCompletion.objects.filter(task=task).count()
+        return task, completions_count
+    return task, None
+
+
+@sync_to_async
+def assign_task_to_user(task_id, user):
+    task = Task.objects.get(id=task_id)
+    if not task.is_group_task:
+        if task.assignee:
+            return None
+        task.assignee = user
+    task.status = 'in_progress'
+    task.save()
+    return task
+
+
+@sync_to_async
+def complete_individual_task(task_id):
+    task = Task.objects.get(id=task_id)
+    task.status = 'completed'
+    task.completed_at = timezone.now()
+    task.save()
+    return task
+
+
+@sync_to_async
+def create_task_completion(task_id, user, comment=None):
+    task = Task.objects.get(id=task_id)
+    completion = TaskCompletion.objects.create(
+        task=task,
+        user=user,
+        comment=comment
+    )
+    return task
+
+
+@sync_to_async
+def get_user_filtered_tasks(user_id):
+    filtered_user = TelegramUser.objects.get(telegram_id=user_id)
+    return list(Task.objects.filter(
+        models.Q(assignee=filtered_user)
+    ).order_by('-created_at'))
+
+
+@task_management_router.callback_query(F.data.in_(["my_tasks", "all_tasks"]))
+async def show_my_tasks(callback: CallbackQuery, state: FSMContext):
+    user, _ = await identify_user(callback.from_user.id)
+    if user.is_admin:
+        tasks = await get_admin_task_list()
+    else:
+        tasks = await get_user_tasks(user)
+
+    keyboard = get_task_list_keyboard(tasks)
+    await safe_edit_message(callback.message, "📋 Ваши задачи:", keyboard)
+    await callback.answer()
+
+
+@sync_to_async
+def get_text_with_details(task: Task):
+    return (
+        f"📝 Задача: {task.title}\n\n"
+        f"📄 Описание: {task.description}\n"
+        f"📅 Дедлайн: {task.deadline.strftime('%d.%m.%Y %H:%M')}\n"
+        f"👤 Создал: {task.creator.first_name}\n"
+        f"📊 Статус: {task.get_status_display()}\n"
+    )
+
+
+@sync_to_async
+def get_assignee_text(task: Task):
+    if task.assignee:
+        return f"👤 Исполнитель: {task.assignee.first_name}\n"
+    else:
+        return ""
+
+
+@task_management_router.callback_query(F.data.startswith("view_task:"))
+async def view_task_details(callback: CallbackQuery, state: FSMContext):
+    task_id = int(callback.data.split(":")[1])
+    user, _ = await identify_user(callback.from_user.id)
+
+    task, completions_count = await get_task_with_completions(task_id)
+
+    task_text = await get_text_with_details(task)
+
+    if user.is_admin:
+        if task.is_group_task and completions_count is not None:
+            task_text += f"✅ Выполнили: {completions_count} человек\n"
+
+    asignee = await get_assignee_text(task)
+    if asignee:
+        task_text += asignee
+
+    keyboard = get_task_detail_keyboard(task.id, user.is_admin, task.status)
+    await send_task_message(callback.message, task, task_text, keyboard)
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data.startswith("take_task:"))
+async def take_task(callback: CallbackQuery, state: FSMContext):
+    task_id = int(callback.data.split(":")[1])
+    user, _ = await identify_user(callback.from_user.id)
+
+    task = await assign_task_to_user(task_id, user)
+    if task:
+        await callback.answer("✅ Задача взята в работу!")
+        # await view_task_details(callback, state)
+    else:
+        await callback.answer("❌ Задача уже взята в работу другим пользователем!")
+
+
+@task_management_router.callback_query(F.data.startswith("submit_task:"))
+async def start_task_submission(callback: CallbackQuery, state: FSMContext):
+    task_id = int(callback.data.split(":")[1])
+    await state.update_data(task_id=task_id)
+    await state.set_state(TaskSubmission.waiting_for_comment)
+
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="⏩ Пропустить", callback_data="skip_comment")
+    keyboard.button(text="❌ Отмена", callback_data="cancel_submission")
+
+    await callback.message.edit_text(
+        "💬 Хотите добавить комментарий к выполненному заданию?\n"
+        "Напишите комментарий или нажмите «Пропустить»",
+        reply_markup=keyboard.as_markup()
+    )
+    await callback.answer()
+
+
+@task_management_router.message(TaskSubmission.waiting_for_comment)
+async def process_submission_comment(message: Message, state: FSMContext):
+    data = await state.get_data()
+    task_id = data['task_id']
+    user, _ = await identify_user(message.from_user.id)
+
+    task, _ = await get_task_with_completions(task_id)
+    if task.is_group_task:
+        task = await create_task_completion(task_id, user, message.text)
+    else:
+        task = await complete_individual_task(task_id)
+
+    await message.answer("✅ Задание успешно сдано!")
+    await state.clear()
+
+
+@task_management_router.callback_query(F.data == "skip_comment")
+async def skip_submission_comment(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    task_id = data['task_id']
+    user, _ = await identify_user(callback.from_user.id)
+
+    task, _ = await get_task_with_completions(task_id)
+    if task.is_group_task:
+        task = await create_task_completion(task_id, user)
+    else:
+        task = await complete_individual_task(task_id)
+
+    await callback.message.edit_text("✅ Задание успешно сдано!")
+    await state.clear()
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data == "cancel_submission")
+async def cancel_submission(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    data = await state.get_data()
+    task_id = data.get('task_id')
+
+    if task_id:
+        await view_task_details(callback, state)
+    else:
+        await show_my_tasks(callback, state)
+
+
+@task_management_router.callback_query(F.data == "back_to_task_list")
+async def handle_back_to_task_list(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    user, _ = await identify_user(callback.from_user.id)
+
+    if user.is_admin:
+        tasks = await get_admin_task_list()
+        text = "🗂 Все задачи:"
+    else:
+        tasks = await get_user_tasks(user)
+        text = "📋 Мои задачи:"
+
+    keyboard = get_task_list_keyboard(tasks)
+    await safe_edit_message(callback.message, text, keyboard)
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data.in_(["open_tasks", "available_tasks"]))
+async def show_open_tasks(callback: CallbackQuery, state: FSMContext):
+    tasks = await get_open_tasks()
+    keyboard = get_task_list_open_keyboard(tasks)
+    try:
+        await callback.message.edit_text("📥 Новые задачи:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("📥 Новые задачи:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data.startswith("task_page:"))
+async def handle_task_pagination(callback: CallbackQuery, state: FSMContext):
+    page = int(callback.data.split(":")[1])
+    data = await state.get_data()
+    filtered_user_id = data.get('filtered_user_id')
+
+    if filtered_user_id:
+        tasks = await get_user_filtered_tasks(filtered_user_id)
+        filtered_user = await sync_to_async(TelegramUser.objects.get)(telegram_id=filtered_user_id)
+        text = f"📋 Задачи пользователя {filtered_user.first_name}:"
+    else:
+        tasks = await get_admin_task_list()
+        text = "📋 Все задачи:"
+
+    keyboard = get_task_list_keyboard(tasks, page=page)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data == "filter_by_user")
+async def show_user_filter(callback: CallbackQuery, state: FSMContext):
+    user, _ = await identify_user(callback.from_user.id)
+
+    if not user.is_admin:
+        await callback.answer("У вас нет прав администратора!", show_alert=True)
+        return
+
+    @sync_to_async
+    def get_active_users():
+        return list(TelegramUser.objects.filter(
+            is_active=True, 
+            is_bot=False,
+            is_admin=False
+        ))
+
+    users = await get_active_users()
+    keyboard = get_user_filter_keyboard(users)
+    await callback.message.edit_text("👥 Выберите пользователя для фильтрации:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data.startswith("filter_tasks_user:"))
+async def show_filtered_tasks(callback: CallbackQuery, state: FSMContext):
+    user_id = int(callback.data.split(":")[1])
+    page = 1
+    await state.update_data(filtered_user_id=user_id, page=page)
+
+    tasks = await get_user_filtered_tasks(user_id)
+    filtered_user = await sync_to_async(TelegramUser.objects.get)(telegram_id=user_id)
+
+    keyboard = get_task_list_keyboard(tasks, page=page)
+    await callback.message.edit_text(
+        f"📋 Задачи пользователя {filtered_user.first_name}:",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data == "clear_filter")
+async def clear_task_filter(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    tasks = await get_admin_task_list()
+    keyboard = get_task_list_keyboard(tasks)
+    await callback.message.edit_text("📋 Все задачи:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data.startswith("user_filter_page:"))
+async def handle_user_filter_pagination(callback: CallbackQuery, state: FSMContext):
+    page = int(callback.data.split(":")[1])
+
+    @sync_to_async
+    def get_active_users():
+        return list(TelegramUser.objects.filter(
+            is_active=True, 
+            is_bot=False,
+            is_admin=False
+        ))
+
+    users = await get_active_users()
+    keyboard = get_user_filter_keyboard(users, page=page)
+    await callback.message.edit_text("👥 Выберите пользователя для фильтрации:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data == "completed_tasks")
+async def show_completed_tasks(callback: CallbackQuery, state: FSMContext):
+    user, _ = await identify_user(callback.from_user.id)
+
+    if not user.is_admin:
+        await callback.answer("У вас нет прав администратора!", show_alert=True)
+        return
+
+    tasks = await get_completed_tasks()
+    keyboard = get_task_list_keyboard(tasks)
+    await callback.message.edit_text("✅ Выполненные задачи:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_management_router.callback_query(F.data == "overdue_tasks")
+async def show_overdue_tasks(callback: CallbackQuery, state: FSMContext):
+    user, _ = await identify_user(callback.from_user.id)
+
+    if not user.is_admin:
+        await callback.answer("У вас нет прав администратора!", show_alert=True)
+        return
+
+    tasks = await get_overdue_tasks()
+    keyboard = get_task_list_keyboard(tasks)
+    await callback.message.edit_text("⏰ Просроченные задачи:", reply_markup=keyboard)
+    await callback.answer()

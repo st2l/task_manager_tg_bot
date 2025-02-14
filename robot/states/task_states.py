@@ -13,3 +13,7 @@ class TaskCreation(StatesGroup):
 
 class TaskComment(StatesGroup):
     waiting_for_comment = State()
+
+
+class TaskSubmission(StatesGroup):
+    waiting_for_comment = State()

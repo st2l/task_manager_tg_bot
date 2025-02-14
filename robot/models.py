@@ -60,6 +60,10 @@ class Task(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
     completed_at = models.DateTimeField(null=True, blank=True)
     media_file_id = models.CharField(max_length=255, blank=True, null=True)
+    media_type = models.CharField(max_length=10, choices=[
+        ('photo', 'Photo'),
+        ('video', 'Video')
+    ], null=True, blank=True)
     
     def __str__(self):
         return self.title
@@ -87,3 +91,13 @@ class Reminder(models.Model):
     
     def __str__(self):
         return f"Reminder for {self.task.title} at {self.reminder_time}"
+
+
+class TaskCompletion(models.Model):
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='completions')
+    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE)
+    completed_at = models.DateTimeField(auto_now_add=True)
+    comment = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        unique_together = ['task', 'user']

@@ -15,6 +15,7 @@ def get_admin_task_list_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="📝 Создать задачу", callback_data="create_task")
     builder.button(text="📋 Все задачи", callback_data="all_tasks")
+    builder.button(text="👤 Фильтр по пользователю", callback_data="filter_by_user")
     builder.button(text="⏰ Просроченные", callback_data="overdue_tasks")
     builder.button(text="✅ Выполненные", callback_data="completed_tasks")
     builder.button(text="◀️ Назад", callback_data="back_to_main")

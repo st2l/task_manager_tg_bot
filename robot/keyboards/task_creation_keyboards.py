@@ -16,7 +16,11 @@ def get_assignment_type_keyboard() -> InlineKeyboardMarkup:
 @sync_to_async
 def get_users_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    users = TelegramUser.objects.filter(is_active=True, is_bot=False)
+    users = TelegramUser.objects.filter(
+        is_active=True, 
+        is_bot=False,
+        is_admin=False
+    )
     
     for user in users:
         builder.button(

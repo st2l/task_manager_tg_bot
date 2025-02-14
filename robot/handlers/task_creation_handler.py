@@ -13,6 +13,7 @@ from ..keyboards.task_keyboards import get_task_action_keyboard, get_open_task_k
 from ..states.task_states import TaskCreation
 from ..models import Task, TelegramUser
 from ..utils import identify_user
+from ..utils.message_utils import safe_edit_message
 from asgiref.sync import sync_to_async
 
 task_creation_router = Router()
@@ -99,21 +100,33 @@ async def process_open_task(callback: CallbackQuery, state: FSMContext):
 async def process_media(message: Message, state: FSMContext):
     if message.photo:
         file_id = message.photo[-1].file_id
-        await state.update_data(media_file_id=file_id, media_type='photo')
+        media_type = 'photo'
     elif message.video:
         file_id = message.video.file_id
-        await state.update_data(media_file_id=file_id, media_type='video')
+        media_type = 'video'
     else:
-        await message.answer("❌ Пожалуйста, отправьте фото или видео, или нажмите 'Пропустить'")
+        await message.answer("❌ Пожалуйста, отправьте фото или видео, либо пропустите этот шаг.")
         return
-
-    await show_confirmation(message, state)
+    
+    await state.update_data(media_file_id=file_id, media_type=media_type)
+    
+    # Показываем превью задачи
+    data = await state.get_data()
+    preview_text = await get_task_preview(data)
+    
+    keyboard = get_confirm_keyboard()
+    await message.answer(preview_text, reply_markup=keyboard)
+    await state.set_state(TaskCreation.confirm_creation)
 
 
 @task_creation_router.callback_query(F.data == "skip_media")
 async def skip_media(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(media_file_id=None, media_type=None)
-    await show_confirmation(callback.message, state)
+    data = await state.get_data()
+    preview_text = await get_task_preview(data)
+    
+    keyboard = get_confirm_keyboard()
+    await safe_edit_message(callback.message, preview_text, keyboard)
+    await state.set_state(TaskCreation.confirm_creation)
     await callback.answer()
 
 
@@ -177,6 +190,49 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
             await bot.send_video(chat_id, task.media_file_id)
 
 
+@sync_to_async
+def save_task(creator, data):
+    assignee = None
+    if not data.get('is_group_task') and data.get('assignee_id'):
+        assignee = TelegramUser.objects.get(telegram_id=data['assignee_id'])
+    
+    task = Task.objects.create(
+        title=data['title'],
+        description=data['description'],
+        creator=creator,
+        assignee=assignee,
+        is_group_task=data.get('is_group_task', False),
+        deadline=data['deadline'],
+        media_file_id=data.get('media_file_id'),
+        media_type=data.get('media_type'),
+        status='open' if data.get('is_open_task') else 'assigned'
+    )
+    return task
+
+
+@sync_to_async
+def get_task_preview(data):
+    preview_text = (
+        f"📝 Название: {data['title']}\n"
+        f"📄 Описание: {data['description']}\n"
+        f"📅 Дедлайн: {data['deadline'].strftime('%d.%m.%Y %H:%M')}\n"
+        f"👥 Тип: {'Групповая' if data.get('is_group_task') else 'Индивидуальная'}"
+    )
+    
+    if not data.get('is_group_task'):
+        if data.get('is_open_task'):
+            preview_text += "\n🔓 Открытая для выполнения"
+        elif data.get('assignee_id'):
+            assignee = TelegramUser.objects.get(telegram_id=data['assignee_id'])
+            preview_text += f"\n👤 Исполнитель: {assignee.first_name}"
+    
+    if data.get('media_file_id'):
+        media_type = "📷 Фото" if data.get('media_type') == 'photo' else "🎥 Видео"
+        preview_text += f"\n{media_type}: Прикреплено"
+    
+    return preview_text
+
+
 @task_creation_router.callback_query(F.data == "confirm_task")
 async def create_task(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -200,27 +256,8 @@ async def create_task(callback: CallbackQuery, state: FSMContext):
     )
     
     await state.clear()
-    await callback.message.edit_text(confirmation_text)
+    await safe_edit_message(callback.message, confirmation_text)
     await callback.answer()
-
-
-@sync_to_async
-def save_task(creator, data):
-    assignee = None
-    if not data.get('is_group_task') and data.get('assignee_id'):
-        assignee = TelegramUser.objects.get(telegram_id=data['assignee_id'])
-    
-    task = Task.objects.create(
-        title=data['title'],
-        description=data['description'],
-        creator=creator,
-        assignee=assignee,
-        is_group_task=data.get('is_group_task', False),
-        deadline=data['deadline'],
-        media_file_id=data.get('media_file_id'),
-        status='open' if data.get('is_open_task') else 'assigned'
-    )
-    return task
 
 
 @task_creation_router.callback_query(F.data == "cancel_creation")
