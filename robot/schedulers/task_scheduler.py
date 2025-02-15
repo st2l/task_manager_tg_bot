@@ -46,10 +46,11 @@ async def send_deadline_notifications(bot, hours: int):
     }.get(hours, f"{hours} часов")
     
     for task in tasks:
+        asignee = await get_task_assignee(task)
         # Уведомление исполнителю
-        if task.assignee and task.assignee.notification_enabled:
+        if asignee:
             await bot.send_message(
-                task.assignee.telegram_id,
+                asignee.telegram_id,
                 f"⚠️ Напоминание!\n"
                 f"До дедлайна задачи «{task.title}» осталось {time_text}!\n"
                 f"Дедлайн: {task.deadline.strftime('%d.%m.%Y %H:%M')}"
@@ -58,15 +59,14 @@ async def send_deadline_notifications(bot, hours: int):
         # Уведомление администраторам о критических задачах
         if hours <= 24:
             for admin in admins:
-                if admin.notification_enabled:
-                    await bot.send_message(
-                        admin.telegram_id,
-                        f"🚨 Внимание администратору!\n"
-                        f"Задача «{task.title}» в критическом статусе!\n"
-                        f"До дедлайна осталось {time_text}\n"
-                        f"Исполнитель: {task.assignee.first_name if task.assignee else 'Не назначен'}\n"
-                        f"Дедлайн: {task.deadline.strftime('%d.%m.%Y %H:%M')}"
-                    )
+                await bot.send_message(
+                    admin.telegram_id,
+                    f"🚨 Внимание администратору!\n"
+                    f"Задача «{task.title}» в критическом статусе!\n"
+                    f"До дедлайна осталось {time_text}\n"
+                    f"Исполнитель: {asignee.first_name if asignee else 'Не назначен'}\n"
+                    f"Дедлайн: {task.deadline.strftime('%d.%m.%Y %H:%M')}"
+                )
 
 
 @sync_to_async
@@ -77,6 +77,9 @@ def get_overdue_tasks():
         deadline__lt=now
     ))
 
+@sync_to_async
+def get_task_assignee(task):
+    return task.assignee
 
 async def check_overdue_tasks(bot):
     tasks = await get_overdue_tasks()
@@ -86,11 +89,11 @@ async def check_overdue_tasks(bot):
         if task.status != 'overdue':
             task.status = 'overdue'
             await sync_to_async(task.save)()
-            
+            asignee = await get_task_assignee(task)
             # Уведомление исполнителю
-            if task.assignee and task.assignee.notification_enabled:
+            if asignee:
                 await bot.send_message(
-                    task.assignee.telegram_id,
+                    asignee.telegram_id,
                     f"🚨 Внимание!\n"
                     f"Задача «{task.title}» просрочена!\n"
                     f"Дедлайн был: {task.deadline.strftime('%d.%m.%Y %H:%M')}"
@@ -103,7 +106,7 @@ async def check_overdue_tasks(bot):
                         admin.telegram_id,
                         f"🚨 Внимание администратору!\n"
                         f"Задача «{task.title}» просрочена!\n"
-                        f"Исполнитель: {task.assignee.first_name if task.assignee else 'Не назначен'}\n"
+                        f"Исполнитель: {asignee.first_name if asignee else 'Не назначен'}\n"
                         f"Дедлайн был: {task.deadline.strftime('%d.%m.%Y %H:%M')}"
                     )
 
@@ -129,7 +132,7 @@ def setup_task_schedulers(bot):
     scheduler.add_job(
         send_deadline_notifications,
         'interval',
-        minutes=15,
+        minutes=1,
         args=[bot, 1]
     )
     
@@ -137,6 +140,6 @@ def setup_task_schedulers(bot):
     scheduler.add_job(
         check_overdue_tasks,
         'interval',
-        minutes=10,
+        minutes=1,
         args=[bot]
     )

@@ -11,12 +11,13 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import os
 from ..utils.logger import logger
+from zoneinfo import ZoneInfo
 
 report_router = Router()
 
 @sync_to_async
 def get_weekly_stats():
-    now = timezone.now()
+    now = timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
     week_ago = now - timedelta(days=7)
     
     return {

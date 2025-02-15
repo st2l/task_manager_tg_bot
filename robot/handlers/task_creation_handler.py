@@ -1,7 +1,7 @@
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 from ..keyboards.task_creation_keyboards import (
     get_assignment_type_keyboard,
@@ -15,7 +15,8 @@ from ..models import Task, TelegramUser
 from ..utils import identify_user
 from ..utils.message_utils import safe_edit_message
 from asgiref.sync import sync_to_async
-
+from zoneinfo import ZoneInfo
+import logging
 task_creation_router = Router()
 
 
@@ -163,14 +164,26 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
         task_type = "🔓 Открытая задача"
         group_text = f"{task_type}\n\n{task_text}"
         keyboard = get_open_task_keyboard(task.id)
-        message = await bot.send_message(group_id, group_text, reply_markup=keyboard)
+        if task.media_file_id:
+            if task.media_type == 'photo':
+                message = await bot.send_photo(group_id, task.media_file_id, caption=group_text, reply_markup=keyboard)
+            else:
+                message = await bot.send_video(group_id, task.media_file_id, caption=group_text, reply_markup=keyboard)
+        else:
+            message = await bot.send_message(group_id, group_text, reply_markup=keyboard)
     
     # Для групповой задачи
     elif task.is_group_task:
         task_type = "👥 Групповая задача"
         group_text = f"{task_type}\n\n{task_text}"
         keyboard = await get_group_task_keyboard(bot)
-        message = await bot.send_message(group_id, group_text, reply_markup=keyboard)
+        if task.media_file_id:
+            if task.media_type == 'photo':
+                message = await bot.send_photo(group_id, task.media_file_id, caption=group_text, reply_markup=keyboard)
+            else:
+                message = await bot.send_video(group_id, task.media_file_id, caption=group_text, reply_markup=keyboard)
+        else:
+            message = await bot.send_message(group_id, group_text, reply_markup=keyboard)
     
     # Для индивидуальной задачи с назначенным исполнителем
     elif task.assignee:
@@ -179,33 +192,42 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
             "Пожалуйста, ознакомьтесь и приступите к выполнению."
         )
         keyboard = get_personal_task_keyboard()
-        message = await bot.send_message(task.assignee.telegram_id, personal_text, reply_markup=keyboard)
+        if task.media_file_id:
+            if task.media_type == 'photo':
+                message = await bot.send_photo(task.assignee.telegram_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
+            else:
+                message = await bot.send_video(task.assignee.telegram_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
+        else:
+            message = await bot.send_message(task.assignee.telegram_id, personal_text, reply_markup=keyboard)
     
     # Отправляем медиафайл, если есть
-    if task.media_file_id:
-        chat_id = group_id if (task.is_group_task or data.get('is_open_task')) else task.assignee.telegram_id
-        if data.get('media_type') == 'photo':
-            await bot.send_photo(chat_id, task.media_file_id)
-        else:
-            await bot.send_video(chat_id, task.media_file_id)
+    # if task.media_file_id:
+    #     chat_id = group_id if (task.is_group_task or data.get('is_open_task')) else task.assignee.telegram_id
+    #     if data.get('media_type') == 'photo':
+    #         await bot.send_photo(chat_id, task.media_file_id)
+    #     else:
+    #         await bot.send_video(chat_id, task.media_file_id)
 
 
 @sync_to_async
-def save_task(creator, data):
-    assignee = None
-    if not data.get('is_group_task') and data.get('assignee_id'):
-        assignee = TelegramUser.objects.get(telegram_id=data['assignee_id'])
-    
+def create_new_task(data, creator):
+    logging.info(f"Creating new task with data: {data}")
+    # deadline = datetime.strptime(data['deadline'], '%Y-%m-%d %H:%M')
+    # deadline = timezone.make_aware(deadline, timezone=ZoneInfo("Europe/Moscow"))
+    try:
+        asignee = TelegramUser.objects.get(telegram_id=data['assignee_id'])
+    except Exception as e:
+        asignee = None
+
     task = Task.objects.create(
         title=data['title'],
         description=data['description'],
         creator=creator,
-        assignee=assignee,
-        is_group_task=data.get('is_group_task', False),
         deadline=data['deadline'],
-        media_file_id=data.get('media_file_id'),
-        media_type=data.get('media_type'),
-        status='open' if data.get('is_open_task') else 'assigned'
+        is_group_task=data['is_group_task'],
+        assignee=asignee,
+        media_file_id=data.get('media_file_id', None),
+        media_type=data.get('media_type', None),
     )
     return task
 
@@ -238,7 +260,7 @@ async def create_task(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     creator, _ = await identify_user(callback.from_user.id)
     
-    task = await save_task(creator, data)
+    task = await create_new_task(data, creator)
     
     # Отправляем уведомления
     bot = callback.bot

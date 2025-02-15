@@ -25,8 +25,6 @@ def get_task_action_keyboard(task_id: int, is_admin: bool = False) -> InlineKeyb
     if is_admin:
         builder.button(text="❌ Удалить",
                        callback_data=f"delete_task:{task_id}")
-        builder.button(text="📝 Редактировать",
-                       callback_data=f"edit_task:{task_id}")
 
     builder.button(text="◀️ Назад", callback_data="back_to_tasks")
     builder.adjust(2)

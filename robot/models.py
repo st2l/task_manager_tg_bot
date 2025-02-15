@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from zoneinfo import ZoneInfo
 
 
 class TelegramUser(models.Model):
@@ -70,8 +71,14 @@ class Task(models.Model):
     
     def mark_completed(self):
         self.status = 'completed'
-        self.completed_at = timezone.now()
+        self.completed_at = timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
         self.save()
+
+    @property
+    def is_overdue(self):
+        if self.status in ['completed', 'overdue']:
+            return False
+        return self.deadline < timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
 
 
 class TaskComment(models.Model):

@@ -9,10 +9,12 @@ from ..states.task_states import TaskSubmission
 from django.utils import timezone
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from django.db import models
+from django.db.models import Q
 from ..utils.message_utils import safe_edit_message, send_task_message
 from ..utils.logger import logger
 import logging
 from aiogram.fsm.state import State, StatesGroup
+from zoneinfo import ZoneInfo
 
 task_management_router = Router()
 
@@ -42,7 +44,7 @@ def get_completed_tasks():
 
 @sync_to_async
 def get_overdue_tasks():
-    now = timezone.now()
+    now = timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
     return list(Task.objects.filter(
         models.Q(status__in=['open', 'in_progress', 'assigned', 'overdue']) &
         models.Q(deadline__lt=now)
@@ -74,7 +76,7 @@ def assign_task_to_user(task_id, user):
 def complete_individual_task(task_id):
     task = Task.objects.get(id=task_id)
     task.status = 'completed'
-    task.completed_at = timezone.now()
+    task.completed_at = timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
     task.save()
     return task
 
@@ -108,12 +110,17 @@ def get_user_completed_tasks(user):
 
 @sync_to_async
 def get_user_overdue_tasks(user):
-    now = timezone.now()
+    now = timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
     return list(Task.objects.filter(
         assignee=user,
         status__in=['in_progress', 'assigned', 'overdue'],
         deadline__lt=now
     ).order_by('deadline'))
+
+
+@sync_to_async
+def get_moscow_time():
+    return timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
 
 
 @task_management_router.callback_query(F.data.in_(["my_tasks", "user_completed_tasks", "user_overdue_tasks"]))
@@ -143,17 +150,17 @@ async def handle_task_list_navigation(callback: CallbackQuery, state: FSMContext
             else:
                 if task_type == "my_tasks":
                     return list(Task.objects.filter(
-                        assignee=user,
+                        (Q(assignee=user) | Q(is_group_task=True)),
                         status__in=['in_progress', 'assigned', 'overdue']
                     ).order_by('-created_at'))
                 elif task_type == "user_completed_tasks":
                     return list(Task.objects.filter(
-                        assignee=user,
+                        (Q(assignee=user) | Q(is_group_task=True)),
                         status='completed'
                     ).order_by('-completed_at'))
                 else:  # user_overdue_tasks
                     return list(Task.objects.filter(
-                        assignee=user,
+                        (Q(assignee=user) | Q(is_group_task=True)),
                         status='overdue'
                     ).order_by('deadline'))
         
@@ -313,7 +320,7 @@ async def handle_task_comment(message: Message, state: FSMContext):
             f"✅ Задача выполнена!\n"
             f"Название: {task.title}\n"
             f"Исполнитель: {user.first_name}\n"
-            f"Время выполнения: {task.completed_at.strftime('%d.%m.%Y %H:%M')}\n"
+            f"Время выполнения: {task.completed_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M')}\n"
             f"💬 Комментарий: {message.text}"
         )
         
@@ -368,7 +375,7 @@ async def skip_task_comment(callback: CallbackQuery, state: FSMContext):
             f"✅ Задача выполнена!\n"
             f"Название: {task.title}\n"
             f"Исполнитель: {user.first_name}\n"
-            f"Время выполнения: {task.completed_at.strftime('%d.%m.%Y %H:%M')}"
+            f"Время выполнения: {task.completed_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M')}"
         )
         
         for admin in admins:
@@ -573,3 +580,42 @@ async def show_my_tasks(callback: CallbackQuery, state: FSMContext):
     keyboard = get_task_list_keyboard(tasks)
     await callback.message.edit_text("📋 Мои задачи:", reply_markup=keyboard)
     await callback.answer()
+
+
+@task_management_router.callback_query(F.data.startswith("delete_task:"))
+async def handle_delete_task(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info(f"Admin {user_id} attempting to delete task")
+    
+    try:
+        task_id = int(callback.data.split(":")[1])
+        user, _ = await identify_user(user_id)
+        
+        if not user.is_admin:
+            logger.warning(f"Unauthorized delete attempt by user {user_id}")
+            await callback.answer("У вас нет прав администратора!", show_alert=True)
+            return
+            
+        @sync_to_async
+        def delete_task():
+            task = Task.objects.get(id=task_id)
+            task_title = task.title
+            task.delete()
+            return task_title
+            
+        task_title = await delete_task()
+        logger.info(f"Task {task_id} ({task_title}) deleted by admin {user_id}")
+        
+        # Return to task list
+        tasks = await get_admin_task_list()
+        keyboard = get_task_list_keyboard(tasks)
+        await callback.message.edit_text(
+            f"✅ Задача «{task_title}» удалена\n\n"
+            "📋 Все задачи:",
+            reply_markup=keyboard
+        )
+        await callback.answer("Задача успешно удалена")
+        
+    except Exception as e:
+        logger.error(f"Error in handle_delete_task for user {user_id}: {str(e)}", exc_info=True)
+        await callback.answer("❌ Произошла ошибка при удалении задачи")

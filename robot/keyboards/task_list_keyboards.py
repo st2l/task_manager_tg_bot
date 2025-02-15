@@ -70,12 +70,11 @@ def get_task_detail_keyboard(task_id: int, user_is_admin: bool = False, task_sta
     
     if task_status == 'open' and not user_is_admin:
         builder.button(text="✅ Взять в работу", callback_data=f"take_task:{task_id}")
-    elif (task_status == 'in_progress' or task_status == 'assigned') and not user_is_admin:
+    elif (task_status == 'in_progress' or task_status == 'assigned' or task_status == 'overdue') and not user_is_admin:
         builder.button(text="📤 Сдать задание", callback_data=f"submit_task:{task_id}")
     
     if user_is_admin:
         builder.button(text="❌ Удалить", callback_data=f"delete_task:{task_id}")
-        builder.button(text="📝 Редактировать", callback_data=f"edit_task:{task_id}")
     
     builder.button(text="◀️ Назад к списку", callback_data="back_to_task_list")
     builder.adjust(1)
@@ -92,7 +91,6 @@ def get_open_task_detail_keyboard(task_id: int, user_is_admin: bool = False, tas
     
     if user_is_admin:
         builder.button(text="❌ Удалить", callback_data=f"delete_task:{task_id}")
-        builder.button(text="📝 Редактировать", callback_data=f"edit_task:{task_id}")
     
     builder.button(text="◀️ Назад к списку", callback_data="available_tasks")
     builder.adjust(1)
