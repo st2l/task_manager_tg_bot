@@ -26,7 +26,7 @@ def get_task_list_open_keyboard(tasks, page=1, items_per_page=5) -> InlineKeyboa
     return builder.as_markup()
 
 
-def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=False) -> InlineKeyboardMarkup:
+def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=False, state: str = '*') -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
     start_idx = (page - 1) * items_per_page
@@ -45,10 +45,10 @@ def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=False)
     nav_buttons = []
     if len(tasks) > items_per_page:
         if page > 1:
-            nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"task_page:{page-1}"))
+            nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"task_page:{page-1}:{state}"))
         nav_buttons.append(InlineKeyboardButton(text=f"{page}/{(len(tasks) + items_per_page - 1) // items_per_page}", callback_data="current_page"))
         if end_idx < len(tasks):
-            nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"task_page:{page+1}"))
+            nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"task_page:{page+1}:{state}"))
     
     if nav_buttons:
         builder.row(*nav_buttons)

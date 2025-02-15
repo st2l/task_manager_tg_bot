@@ -42,11 +42,14 @@ async def export_to_sheets():
     scope = ['https://spreadsheets.google.com/feeds',
              'https://www.googleapis.com/auth/drive']
     
+    credentials_file = os.getenv('GOOGLE_SHEETS_CREDENTIALS_FILE', 'credentials.json')
+    spreadsheet_id = os.getenv('GOOGLE_SHEETS_SPREADSHEET_ID')
+    
     creds = ServiceAccountCredentials.from_json_keyfile_name(
-        'credentials.json', scope)
+        credentials_file, scope)
     client = gspread.authorize(creds)
     
-    sheet = client.open("Task Reports").sheet1
+    sheet = client.open_by_key(spreadsheet_id).sheet1
     
     @sync_to_async
     def get_detailed_stats():

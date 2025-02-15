@@ -132,7 +132,7 @@ def setup_task_schedulers(bot):
     scheduler.add_job(
         send_deadline_notifications,
         'interval',
-        minutes=1,
+        minutes=10,
         args=[bot, 1]
     )
     
@@ -140,6 +140,6 @@ def setup_task_schedulers(bot):
     scheduler.add_job(
         check_overdue_tasks,
         'interval',
-        minutes=1,
+        minutes=10,
         args=[bot]
     )

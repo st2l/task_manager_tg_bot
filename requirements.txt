@@ -1,0 +1,6 @@
+django>=5.1.6
+aiogram>=3.0.0
+python-dotenv
+apscheduler
+gspread
+oauth2client 

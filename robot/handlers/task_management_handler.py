@@ -20,12 +20,32 @@ task_management_router = Router()
 
 
 @sync_to_async
-def get_user_tasks(user):
-    return list(Task.objects.filter(
-        (models.Q(assignee=user) & ~models.Q(status__in=['open', 'completed'])) |
-        (models.Q(is_group_task=True) & models.Q(status='in_progress'))
-    ))
-
+def get_user_tasks(user, state: str = '*'):
+    if state == '*':
+        return list(Task.objects.filter(
+            (models.Q(assignee=user) & ~models.Q(status__in=['open', 'completed'])) |
+            (models.Q(is_group_task=True) & models.Q(status='in_progress'))
+        ))
+    elif state == 'my_tasks':
+        logging.info(f"Getting user tasks for user {user.id} with state {state}")
+        logging.info(f"length = {len(list(Task.objects.filter(
+            (models.Q(assignee=user) | models.Q(is_group_task=True)),
+            status__in=['in_progress', 'assigned', 'overdue']
+        ).order_by('-created_at')))}")
+        return list(Task.objects.filter(
+            (models.Q(assignee=user) | models.Q(is_group_task=True)),
+            status__in=['in_progress', 'assigned', 'overdue']
+        ).order_by('-created_at'))
+    elif state == 'user_completed_tasks':
+        return list(Task.objects.filter(
+            (models.Q(assignee=user) | models.Q(is_group_task=True)),
+            status='completed'
+        ).order_by('-completed_at'))
+    elif state == 'user_overdue_tasks':
+        return list(Task.objects.filter(
+            (models.Q(assignee=user) | models.Q(is_group_task=True)),
+            status='overdue'
+        ).order_by('deadline'))
 
 @sync_to_async
 def get_open_tasks():
@@ -33,9 +53,15 @@ def get_open_tasks():
 
 
 @sync_to_async
-def get_admin_task_list():
-    return list(Task.objects.all().order_by('-created_at'))
-
+def get_admin_task_list(state: str = '*'):
+    if state == '*':
+        return list(Task.objects.all().order_by('-created_at'))
+    elif state == 'my_tasks':
+        return list(Task.objects.filter(status__in=['in_progress', 'assigned', 'overdue']).order_by('-created_at'))
+    elif state == 'user_completed_tasks':
+        return list(Task.objects.filter(status='completed').order_by('-completed_at'))
+    elif state == 'user_overdue_tasks':
+        return list(Task.objects.filter(status='overdue').order_by('deadline'))
 
 @sync_to_async
 def get_completed_tasks():
@@ -93,12 +119,28 @@ def create_task_completion(task_id, user, comment=None):
 
 
 @sync_to_async
-def get_user_filtered_tasks(user_id):
+def get_user_filtered_tasks(user_id, state: str = '*'):
+    logging.info(f"Getting user filtered tasks for user {user_id} with state {state}")
     filtered_user = TelegramUser.objects.get(telegram_id=user_id)
-    return list(Task.objects.filter(
-        models.Q(assignee=filtered_user)
-    ).order_by('-created_at'))
-
+    if state == '*':
+        return list(Task.objects.filter(
+            models.Q(assignee=filtered_user)
+        ).order_by('-created_at'))
+    elif state == 'my_tasks':
+        return list(Task.objects.filter(
+            models.Q(assignee=filtered_user),
+            status__in=['in_progress', 'assigned', 'overdue']
+        ).order_by('-created_at'))
+    elif state == 'user_completed_tasks':
+        return list(Task.objects.filter(
+            models.Q(assignee=filtered_user),
+            status='completed'
+        ).order_by('-completed_at'))
+    elif state == 'user_overdue_tasks':
+        return list(Task.objects.filter(
+            models.Q(assignee=filtered_user),
+            status='overdue'
+        ).order_by('deadline'))
 
 @sync_to_async
 def get_user_completed_tasks(user):
@@ -174,7 +216,8 @@ async def handle_task_list_navigation(callback: CallbackQuery, state: FSMContext
         else:  # user_overdue_tasks
             text = "⏰ Все просроченные задачи:" if user.is_admin else "⏰ Мои просроченные задачи:"
         
-        keyboard = get_task_list_keyboard(tasks)
+        
+        keyboard = get_task_list_keyboard(tasks, state=callback.data)
         await callback.message.edit_text(text, reply_markup=keyboard)
         await callback.answer()
         logger.info(f"Successfully displayed task list for user {user_id}")
@@ -445,18 +488,26 @@ async def show_open_tasks(callback: CallbackQuery, state: FSMContext):
 @task_management_router.callback_query(F.data.startswith("task_page:"))
 async def handle_task_pagination(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data.split(":")[1])
+    state_ = callback.data.split(":")[2]
     data = await state.get_data()
     filtered_user_id = data.get('filtered_user_id')
+    logging.info(f'FILTERED_USER_ID = {filtered_user_id}')
 
-    if filtered_user_id:
-        tasks = await get_user_filtered_tasks(filtered_user_id)
+    user, _ = await identify_user(callback.from_user.id)
+
+    if not user.is_admin:
+        tasks = await get_user_tasks(user, state_)
+        text = "📋 Мои задачи:"
+    elif filtered_user_id:
+        logger.info(f"Getting user filtered tasks for user {filtered_user_id} with state {state_}")
+        tasks = await get_user_filtered_tasks(filtered_user_id, state_)
         filtered_user = await sync_to_async(TelegramUser.objects.get)(telegram_id=filtered_user_id)
         text = f"📋 Задачи пользователя {filtered_user.first_name}:"
     else:
-        tasks = await get_admin_task_list()
+        tasks = await get_admin_task_list(state=state_)
         text = "📋 Все задачи:"
 
-    keyboard = get_task_list_keyboard(tasks, page=page)
+    keyboard = get_task_list_keyboard(tasks, page=page, state=state_)
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
 

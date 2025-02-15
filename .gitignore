@@ -10,3 +10,6 @@ db.sqlite3
 
 /logs/*
 .venv/
+
+credentials.json
+/db/*
