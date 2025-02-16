@@ -116,7 +116,7 @@ def setup_task_schedulers(bot):
     scheduler.add_job(
         send_deadline_notifications,
         'interval',
-        hours=1,
+        hours=24,
         args=[bot, 48]
     )
     
@@ -124,7 +124,7 @@ def setup_task_schedulers(bot):
     scheduler.add_job(
         send_deadline_notifications,
         'interval',
-        hours=1,
+        hours=24,
         args=[bot, 24]
     )
     
@@ -132,7 +132,7 @@ def setup_task_schedulers(bot):
     scheduler.add_job(
         send_deadline_notifications,
         'interval',
-        minutes=10,
+        hours=1,
         args=[bot, 1]
     )
     
