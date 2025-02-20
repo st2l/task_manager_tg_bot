@@ -6,9 +6,10 @@ from .models import TelegramUser, Task, TaskComment, Reminder
 
 @admin.register(TelegramUser)
 class TelegramUserAdmin(admin.ModelAdmin):
-    list_display = ('telegram_id', 'first_name', 'username', 'is_admin', 'is_active')
+    list_display = ('username', 'first_name', 'telegram_id', 'is_admin', 'is_active')
     list_filter = ('is_active', 'is_admin')
     search_fields = ('telegram_id', 'first_name', 'username')
+    ordering = ('username',)  # Добавьте эту строку для сортировки по умолчанию
 
 
 @admin.register(Task)

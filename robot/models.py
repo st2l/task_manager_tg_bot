@@ -24,7 +24,9 @@ class TelegramUser(models.Model):
             return self.objects.get(telegram_id=telegram_id), True
 
     def __str__(self):
-        return f"{self.first_name} ({self.telegram_id})"
+        if self.username:
+            return f"{self.first_name} (@{self.username})"
+        return f"{self.first_name}"
 
 
 class BotText(models.Model):

@@ -13,6 +13,9 @@ class Command(BaseCommand):
     help = 'RUN COMMAND: python manage.py runbot'
 
     def handle(self, *args, **options):
+
+        load_dotenv()
+
         bot = Bot(token=os.getenv("TELEGRAM_TOKEN"))
         dp = Dispatcher()
         dp.include_router(router)
