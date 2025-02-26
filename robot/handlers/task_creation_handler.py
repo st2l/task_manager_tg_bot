@@ -26,11 +26,11 @@ async def start_task_creation(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
     
     if not user.is_admin:
-        await callback.answer("У вас нет прав для создания задач!", show_alert=True)
+        await callback.answer("You do not have access!", show_alert=True)
         return
 
     await state.set_state(TaskCreation.waiting_for_title)
-    await callback.message.edit_text("📝 Введите название задачи:")
+    await callback.message.edit_text("📝 Enter task name:")
     await callback.answer()
 
 
@@ -38,7 +38,7 @@ async def start_task_creation(callback: CallbackQuery, state: FSMContext):
 async def process_title(message: Message, state: FSMContext):
     await state.update_data(title=message.text)
     await state.set_state(TaskCreation.waiting_for_description)
-    await message.answer("📄 Введите описание задачи:")
+    await message.answer("📄 Enter task desc:")
 
 
 from aiogram.types import InlineKeyboardMarkup
@@ -52,8 +52,8 @@ def seven_days_kb():
     for i in range(1, 7+1):
         next_day = now + timedelta(days=i)
         logging.info(f'next_day -> {next_day}')
-        kb.button(text=f'{next_day.day}.{next_day.month}.{next_day.year} 23:59',
-                  callback_data=f'choose_time_{next_day.day}.{next_day.month}.{next_day.year} 23:59')
+        kb.button(text=f'{next_day.month}/{next_day.day}/{next_day.year} 23:59',
+                  callback_data=f'choose_time_{next_day.month}/{next_day.day}/{next_day.year} 23:59')
     kb.adjust(2)
     return kb.as_markup()
     
@@ -63,7 +63,7 @@ async def process_description(message: Message, state: FSMContext):
     await state.update_data(description=message.text)
     await state.set_state(TaskCreation.waiting_for_deadline)
     await message.answer(
-        "📅 Введите дедлайн в формате ДД.ММ.ГГГГ ЧЧ:ММ\nНапример: 31.12.2024 15:00\n\nИли выберите из списка внизу.",
+        "📅 Enter deadline in a format MM/DD/YYYY HH:MM\nExample: 12/31/2024 15:00\n\nOr choose from the list below.",
         reply_markup=seven_days_kb(),
         )
 
@@ -71,12 +71,12 @@ async def process_description(message: Message, state: FSMContext):
 async def process_deadline_time(callback: CallbackQuery, state: FSMContext):
     try:
         
-        deadline = datetime.strptime(callback.data.split('_')[-1], "%d.%m.%Y %H:%M")
+        deadline = datetime.strptime(callback.data.split('_')[-1], "%m/%d/%Y %H:%M")
         await state.update_data(deadline=deadline)
         
         await state.set_state(TaskCreation.waiting_for_assignment_type)
         keyboard = get_assignment_type_keyboard()
-        await callback.message.edit_text("👥 Выберите тип назначения:", reply_markup=keyboard)
+        await callback.message.edit_text("👥 Choose type of task:", reply_markup=keyboard)
         
     except Exception as e:
         await callback.answer(f'Error: {e}')
@@ -84,14 +84,14 @@ async def process_deadline_time(callback: CallbackQuery, state: FSMContext):
 @task_creation_router.message(TaskCreation.waiting_for_deadline)
 async def process_deadline(message: Message, state: FSMContext):
     try:
-        deadline = datetime.strptime(message.text, "%d.%m.%Y %H:%M")
+        deadline = datetime.strptime(message.text, "%m/%d/%Y %H:%M")
         await state.update_data(deadline=deadline)
         
         await state.set_state(TaskCreation.waiting_for_assignment_type)
         keyboard = get_assignment_type_keyboard()
-        await message.answer("👥 Выберите тип назначения:", reply_markup=keyboard)
+        await message.answer("👥 Enter type of task:", reply_markup=keyboard)
     except ValueError:
-        await message.answer("❌ Неверный формат даты. Попробуйте еще раз в формате ДД.М.ГГГ ЧЧ:ММ")
+        await message.answer("❌ Incorrect format. Remember: MM/DD/YYYY HH:MM")
 
 
 @task_creation_router.callback_query(F.data == "individual_task")
@@ -99,7 +99,7 @@ async def process_individual_task(callback: CallbackQuery, state: FSMContext):
     await state.update_data(is_group_task=False)
     keyboard = await get_users_keyboard()
     await state.set_state(TaskCreation.waiting_for_assignee)
-    await callback.message.edit_text("👤 Выберите исполнителя:", reply_markup=keyboard)
+    await callback.message.edit_text("👤 Choose assignee:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -108,7 +108,7 @@ async def process_group_task(callback: CallbackQuery, state: FSMContext):
     await state.update_data(is_group_task=True)
     keyboard = get_media_keyboard()
     await state.set_state(TaskCreation.waiting_for_media)
-    await callback.message.edit_text("📎 Прикрепите медиафайл (фото/видео) или пропустите этот шаг:", reply_markup=keyboard)
+    await callback.message.edit_text("📎 Send a photo/video or skip the step:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -122,7 +122,7 @@ async def process_multi_task(callback: CallbackQuery, state: FSMContext):
     # Get and set the multi-user selection keyboard
     keyboard = await get_multi_users_keyboard()
     await state.set_state(TaskCreation.selecting_assignees)
-    await callback.message.edit_text("👥 Выберите исполнителей задачи:", reply_markup=keyboard)
+    await callback.message.edit_text("👥 Choose assignees for task:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -146,7 +146,7 @@ async def handle_user_selection(callback: CallbackQuery, state: FSMContext):
     
     # Update the keyboard with new selection state
     keyboard = await get_multi_users_keyboard(selected_users, current_page)
-    await callback.message.edit_text("👥 Выберите исполнителей задачи:", reply_markup=keyboard)
+    await callback.message.edit_text("👥 Choose assignees for task:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -163,7 +163,7 @@ async def handle_pagination(callback: CallbackQuery, state: FSMContext):
     
     # Update the keyboard with new page
     keyboard = await get_multi_users_keyboard(selected_users, new_page)
-    await callback.message.edit_text("👥 Выберите исполнителей задачи:", reply_markup=keyboard)
+    await callback.message.edit_text("👥 Choose assignees for task:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -173,12 +173,12 @@ async def confirm_multi_selection(callback: CallbackQuery, state: FSMContext):
     selected_users = data.get('selected_users', [])
     
     if not selected_users:
-        await callback.answer("❌ Выберите хотя бы одного исполнителя!", show_alert=True)
+        await callback.answer("❌ Choose at least one!", show_alert=True)
         return
     
     keyboard = get_media_keyboard()
     await state.set_state(TaskCreation.waiting_for_media)
-    await callback.message.edit_text("📎 Прикрепите медиафайл (фото/видео) или пропустите этот шаг:", reply_markup=keyboard)
+    await callback.message.edit_text("📎 Send photo/video or skip this step:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -193,7 +193,7 @@ async def process_assignee(callback: CallbackQuery, state: FSMContext):
     await state.update_data(assignee_id=user_id, is_open_task=False)
     keyboard = get_media_keyboard()
     await state.set_state(TaskCreation.waiting_for_media)
-    await callback.message.edit_text("📎 Прикрепите медиафайл (фото/видео) или пропустите этот шаг:", reply_markup=keyboard)
+    await callback.message.edit_text("📎 Send photo/video or skip this step", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -202,7 +202,7 @@ async def process_open_task(callback: CallbackQuery, state: FSMContext):
     await state.update_data(assignee_id=None, is_open_task=True)
     keyboard = get_media_keyboard()
     await state.set_state(TaskCreation.waiting_for_media)
-    await callback.message.edit_text("📎 Прикрепите медиафайл (фото/видео) или пропустите этот шаг:", reply_markup=keyboard)
+    await callback.message.edit_text("📎 Send photo/video or skip this step:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -215,7 +215,7 @@ async def process_media(message: Message, state: FSMContext):
         file_id = message.video.file_id
         media_type = 'video'
     else:
-        await message.answer("❌ Пожалуйста, отправьте фото или видео, либо пропустите этот шаг.")
+        await message.answer("❌ Please... Send photo/video or skip this step:")
         return
     
     await state.update_data(media_file_id=file_id, media_type=media_type)
@@ -244,11 +244,11 @@ async def show_confirmation(message: Message, state: FSMContext):
     data = await state.get_data()
     
     confirmation_text = (
-        "📋 Подтвердите создание задачи:\n\n"
-        f"📝 Название: {data['title']}\n"
-        f"📄 Описание: {data['description']}\n"
-        f"📅 Дедлайн: {data['deadline'].strftime('%d.%m.%Y %H:%M')}\n"
-        f"👥 Тип: {'Групповая' if data.get('is_group_task') else 'Индивидуальная'}\n"
+        "📋 Check task details:\n\n"
+        f"📝 Name: {data['title']}\n"
+        f"📄 Description: {data['description']}\n"
+        f"📅 Deadline: {data['deadline'].strftime('%m/%d/%Y %I:%M %p')}\n"
+        f"👥 Type: {'Group' if data.get('is_group_task') else 'Solo'}\n"
     )
     
     keyboard = get_confirm_keyboard()
@@ -262,15 +262,15 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
     
     # Формируем базовый текст задачи
     task_text = (
-        f"📋 Новая задача: {task.title}\n\n"
-        f"📝 Описание: {task.description}\n"
-        f"📅 Дедлайн: {task.deadline.strftime('%d.%m.%Y %H:%M')}\n"
-        f"👤 Создал: {task.creator.first_name}"
+        f"📋 New task: {task.title}\n\n"
+        f"📝 Description: {task.description}\n"
+        f"📅 Deadline: {task.deadline.strftime('%m/%d/%Y %I:%M %p')}\n"
+        f"👤 Created by: {task.creator.first_name}"
     )
 
     # For multi-task (multiple assignees)
     if task.is_multi_task:
-        task_type = "👥 Задача для выбранных пользователей"
+        task_type = "👥 Task for chosen assignees"
         
         # Get assignees from database
         @sync_to_async
@@ -294,7 +294,7 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
         assignees_names = [assignment.user.first_name for assignment in assignments]
         assignees_text = ", ".join(assignees_names)
         
-        group_text = f"{task_type}\n\n{task_text}\n\nИсполнители: {assignees_text}"
+        group_text = f"{task_type}\n\n{task_text}\n\nAssignees: {assignees_text}"
         
         # Send to group chat
         if task.media_file_id:
@@ -307,8 +307,8 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
         
         # Send to individual assignees
         personal_text = (
-            f"👤 Вам назначена новая задача!\n\n{task_text}\n\n"
-            "Пожалуйста, ознакомьтесь и примите задание к выполнению."
+            f"👤 You have been assigned to a new task!\n\n{task_text}\n\n"
+            "Read the task and start it!"
         )
         
         for assignment in assignments:
@@ -324,7 +324,7 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
     
     # Для открытой задачи
     elif data.get('is_open_task'):
-        task_type = "🔓 Открытая задача"
+        task_type = "🔓 Open task"
         group_text = f"{task_type}\n\n{task_text}"
         keyboard = get_open_task_keyboard(task.id)
         if task.media_file_id:
@@ -337,7 +337,7 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
     
     # Для групповой задачи
     elif task.is_group_task:
-        task_type = "👥 Групповая задача"
+        task_type = "👥 Group task"
         group_text = f"{task_type}\n\n{task_text}"
         keyboard = await get_group_task_keyboard(bot)
         if task.media_file_id:
@@ -351,8 +351,8 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
     # Для индивидуальной задачи с назначенным исполнителем
     elif task.assignee:
         personal_text = (
-            f"👤 Вам назначена новая задача!\n\n{task_text}\n\n"
-            "Пожалуйста, ознакомьтесь и примите задание к выполнению."
+            f"👤 You have been assigned to a task!\n\n{task_text}\n\n"
+            "Read the task and start it!"
         )
         keyboard = get_personal_task_keyboard(task.id)
         if task.media_file_id:
@@ -410,15 +410,15 @@ def create_new_task(data, creator):
 @sync_to_async
 def get_task_preview(data):
     preview_text = (
-        f"📝 Название: {data['title']}\n"
-        f"📄 Описание: {data['description']}\n"
-        f"📅 Дедлайн: {data['deadline'].strftime('%d.%m.%Y %H:%M')}\n"
+        f"📝 Name: {data['title']}\n"
+        f"📄 Description: {data['description']}\n"
+        f"📅 Deadline: {data['deadline'].strftime('%m/%d/%Y %I:%M %p')}\n"
     )
     
     if data.get('is_group_task'):
-        preview_text += "👥 Тип: Групповая (для всех участников группы)"
+        preview_text += "👥 Type: Group (for all members of group)"
     elif data.get('is_multi_task'):
-        preview_text += "👥 Тип: Мультизадача (для выбранных пользователей)"
+        preview_text += "👥 Type: Multicast (for exact members)"
         
         # Add selected users info
         if 'selected_users' in data and data['selected_users']:
@@ -433,16 +433,16 @@ def get_task_preview(data):
             if selected_users:
                 preview_text += f"\n👤 Исполнители: {', '.join(selected_users)}"
     else:
-        preview_text += "👤 Тип: Индивидуальная"
+        preview_text += "👤 Type: Solo"
         if data.get('is_open_task'):
-            preview_text += "\n🔓 Открытая для выполнения"
+            preview_text += "\n🔓 Open for working"
         elif data.get('assignee_id'):
             assignee = TelegramUser.objects.get(telegram_id=data['assignee_id'])
-            preview_text += f"\n👤 Исполнитель: {assignee.first_name}"
+            preview_text += f"\n👤 Assignee: {assignee.first_name}"
     
     if data.get('media_file_id'):
-        media_type = "📷 Фото" if data.get('media_type') == 'photo' else "🎥 Видео"
-        preview_text += f"\n{media_type}: Прикреплено"
+        media_type = "📷 Photo" if data.get('media_type') == 'photo' else "🎥 video"
+        preview_text += f"\n{media_type}: Pinned"
     
     return preview_text
 
@@ -459,14 +459,14 @@ async def create_task(callback: CallbackQuery, state: FSMContext):
     await send_task_notification(bot, task, data)
     
     # Формируем текст подтверждения для создателя
-    task_type = "групповая" if task.is_group_task else "индивидуальная"
+    task_type = "group" if task.is_group_task else "solo"
     if not task.is_group_task and data.get('is_open_task'):
-        task_type += " (открыта для выполнения)"
+        task_type += " (open for work)"
     
     confirmation_text = (
-        f"✅ Задача '{task.title}' успешно создана!\n"
-        f"Тип: {task_type}\n"
-        f"Дедлайн: {task.deadline.strftime('%d.%m.%Y %H:%M')}"
+        f"✅ Task '{task.title}' create successfully!\n"
+        f"Type: {task_type}\n"
+        f"Deadline: {task.deadline.strftime('%m/%d/%Y %H:%M')}"
     )
     
     await state.clear()
@@ -477,5 +477,5 @@ async def create_task(callback: CallbackQuery, state: FSMContext):
 @task_creation_router.callback_query(F.data == "cancel_creation")
 async def cancel_creation(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Создание задачи отменено")
+    await callback.message.edit_text("❌ Creation of task canceled")
     await callback.answer()

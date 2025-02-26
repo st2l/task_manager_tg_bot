@@ -226,11 +226,11 @@ async def handle_task_list_navigation(callback: CallbackQuery, state: FSMContext
         logger.info(f"Retrieved {len(tasks)} tasks for user {user_id}")
         
         if callback.data == "my_tasks":
-            text = "📋 Все активные задачи:" if user.is_admin else "📋 Мои задачи:"
+            text = "📋 All active tasks:" if user.is_admin else "📋 My tasks:"
         elif callback.data == "user_completed_tasks":
-            text = "✅ Все выполненные задачи:" if user.is_admin else "✅ Мои выполненные задачи:"
+            text = "✅ All completed tasks:" if user.is_admin else "✅ My completed tasks:"
         else:  # user_overdue_tasks
-            text = "⏰ Все просроченные задачи:" if user.is_admin else "⏰ Мои просроченные задачи:"
+            text = "⏰ All overdue tasks:" if user.is_admin else "⏰ My overdue tasks:"
         
         
         keyboard = get_task_list_keyboard(tasks, state=callback.data)
@@ -240,24 +240,24 @@ async def handle_task_list_navigation(callback: CallbackQuery, state: FSMContext
         
     except Exception as e:
         logger.error(f"Error in handle_task_list_navigation for user {user_id}: {str(e)}", exc_info=True)
-        await callback.answer("Произошла ошибка при загрузке списка задач")
+        await callback.answer("Error occured in displaying task list")
 
 
 @sync_to_async
 def get_text_with_details(task: Task):
     return (
-        f"📝 Задача: {task.title}\n\n"
-        f"📄 Описание: {task.description}\n"
-        f"📅 Дедлайн: {task.deadline.strftime('%d.%m.%Y %H:%M')}\n"
-        f"👤 Создал: {task.creator.first_name}\n"
-        f"📊 Статус: {task.get_status_display()}\n"
+        f"📝 Task: {task.title}\n\n"
+        f"📄 Description: {task.description}\n"
+        f"📅 Deadline: {task.deadline.strftime('%m/%d/%Y %I:%M %p')}\n"
+        f"👤 Created by: {task.creator.first_name}\n"
+        f"📊 Status: {task.get_status_display()}\n"
     )
 
 
 @sync_to_async
 def get_assignee_text(task: Task):
     if task.assignee:
-        return f"👤 Исполнитель: {task.assignee.first_name}\n"
+        return f"👤 Assignee: {task.assignee.first_name}\n"
     else:
         return ""
 
@@ -286,13 +286,13 @@ async def view_task_details(callback: CallbackQuery, state: FSMContext):
 
     if user.is_admin:
         if task.is_group_task and completions_count is not None:
-            task_text += f"✅ Выполнили: {completions_count} человек\n"
+            task_text += f"✅ Completed: {completions_count} members\n"
         if task.status == 'completed':
-            task_text += f"✅ Задание выполнено\n"
+            task_text += f"✅ Task completed\n"
 
             comment = await get_task_comment(task)
             if comment:
-                task_text += f"💬 Комментарий: {comment}\n"
+                task_text += f"💬 Commentary: {comment}\n"
 
     asignee = await get_assignee_text(task)
     if asignee:
@@ -310,10 +310,10 @@ async def take_task(callback: CallbackQuery, state: FSMContext):
 
     task = await assign_task_to_user(task_id, user)
     if task:
-        await callback.answer("✅ Задача взята в работу!")
+        await callback.answer("✅ Task taken to work!")
         # await view_task_details(callback, state)
     else:
-        await callback.answer("❌ Задача уже взята в работу другим пользователем!")
+        await callback.answer("❌ Task has been already taken!")
 
 
 @sync_to_async
@@ -345,10 +345,10 @@ async def submit_task(callback: CallbackQuery, state: FSMContext):
         
         # Ask for mandatory comment
         keyboard = InlineKeyboardBuilder()
-        keyboard.button(text="❌ Отмена", callback_data="cancel_submission")
+        keyboard.button(text="❌ Cancel", callback_data="cancel_submission")
         await callback.message.edit_text(
-            "💬 Пожалуйста, напишите комментарий к выполненному заданию.\n"
-            "Комментарий обязателен для завершения задачи.",
+            "💬 Please add commentary to work.\n"
+            "It is neccessary.",
             reply_markup=keyboard.as_markup()
         )
         await state.set_state(TaskStates.waiting_for_comment)
@@ -357,7 +357,7 @@ async def submit_task(callback: CallbackQuery, state: FSMContext):
         
     except Exception as e:
         logger.error(f"Error in submit_task for user {user_id}: {str(e)}", exc_info=True)
-        await callback.answer("❌ Произошла ошибка при выполнении задачи")
+        await callback.answer("❌ Error in completion task")
 
 
 @task_management_router.message(TaskStates.waiting_for_comment)
@@ -383,18 +383,18 @@ async def handle_task_comment(message: Message, state: FSMContext):
         
         # Send notification to task creator
         notification_text = (
-            f"📨 Задача сдана на проверку!\n\n"
-            f"Название: {task.title}\n"
-            f"Исполнитель: {user.first_name}\n"
-            f"Время сдачи: {timezone.now().astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M')}\n"
-            f"💬 Комментарий: {message.text}\n\n"
+            f"📨 Task was sent for approve!\n\n"
+            f"Name: {task.title}\n"
+            f"Assignee: {user.first_name}\n"
+            f"Time sent: {timezone.now().astimezone(ZoneInfo('Europe/Moscow')).strftime('%m/%d/%Y %I:%M %p')}\n"
+            f"💬 Commentary: {message.text}\n\n"
             # f"Чтобы проверить и подтвердить выполнение, используйте команду /review_{task_id}"
         )
         
         try:
             # Send notification with review keyboard
             review_keyboard = InlineKeyboardBuilder()
-            review_keyboard.button(text="✅ Проверить задание", callback_data=f"review_task:{task_id}")
+            review_keyboard.button(text="✅ Review task", callback_data=f"review_task:{task_id}")
             await message.bot.send_message(
                 creator.telegram_id,
                 notification_text,
@@ -407,15 +407,15 @@ async def handle_task_comment(message: Message, state: FSMContext):
         # Update task view for the user
         task_text = await get_text_with_details(task)
         await message.answer(
-            f"✅ Задача отправлена на проверку!\n"
-            f"После проверки администратором, вы получите уведомление о результате.\n\n{task_text}"
+            f"✅ Task send for approve!\n"
+            f"You will get the notification about the status of task later.\n\n{task_text}"
         )
         await state.clear()
         logger.info(f"Task {task_id} marked as submitted with comment by user {user_id}")
         
     except Exception as e:
         logger.error(f"Error in handle_task_comment for user {user_id}: {str(e)}", exc_info=True)
-        await message.answer("❌ Произошла ошибка при отправке задачи на проверку")
+        await message.answer("❌ Error occured")
         await state.clear()
 
 
@@ -430,7 +430,7 @@ async def review_task(callback: CallbackQuery, state: FSMContext):
         user, _ = await identify_user(user_id)
         
         if not user.is_admin:
-            await callback.answer("У вас нет прав для проверки задач!", show_alert=True)
+            await callback.answer("You do not have access!", show_alert=True)
             return
         
         # Get task details
@@ -452,10 +452,10 @@ async def review_task(callback: CallbackQuery, state: FSMContext):
         
         # Display task details to admin
         task_info = (
-            f"📋 Проверка задачи: {task.title}\n\n"
-            f"📄 Описание: {task.description}\n"
-            f"📅 Дедлайн: {task.deadline.strftime('%d.%m.%Y %H:%M')}\n"
-            f"👤 Исполнитель: "
+            f"📋 Task name: {task.title}\n\n"
+            f"📄 Description: {task.description}\n"
+            f"📅 Deadline: {task.deadline.strftime('%m/%d/%Y %I:%M %p')}\n"
+            f"👤 Assignee: "
         )
         
         if task.is_multi_task and multi_assignees:
@@ -464,16 +464,16 @@ async def review_task(callback: CallbackQuery, state: FSMContext):
         elif assignee:
             task_info += f"{assignee.first_name}\n"
         else:
-            task_info += "Не назначен\n"
+            task_info += "Not assigned\n"
         
         if latest_comment:
-            task_info += f"\n💬 Комментарий от исполнителя:\n{latest_comment.text}\n"
+            task_info += f"\n💬 Commentary from user:\n{latest_comment.text}\n"
         
         # Create review keyboard
         review_keyboard = InlineKeyboardBuilder()
-        review_keyboard.button(text="✅ Принять задачу", callback_data=f"accept_completion:{task_id}")
-        review_keyboard.button(text="🔄 Отправить на доработку", callback_data=f"request_revision:{task_id}")
-        review_keyboard.button(text="❌ Отмена", callback_data=f"cancel_review:{task_id}")
+        review_keyboard.button(text="✅ Confirm competion", callback_data=f"accept_completion:{task_id}")
+        review_keyboard.button(text="🔄 Send for a rework", callback_data=f"request_revision:{task_id}")
+        review_keyboard.button(text="❌ Cancel", callback_data=f"cancel_review:{task_id}")
         review_keyboard.adjust(1)
         
         await callback.message.edit_text(task_info, reply_markup=review_keyboard.as_markup())
@@ -482,7 +482,7 @@ async def review_task(callback: CallbackQuery, state: FSMContext):
         
     except Exception as e:
         logger.error(f"Error in review_task for admin {user_id}: {str(e)}", exc_info=True)
-        await callback.answer("❌ Произошла ошибка при открытии проверки задачи")
+        await callback.answer("❌ Error occured in reviewing task")
 
 
 @task_management_router.callback_query(F.data.startswith("accept_completion:"))
@@ -495,7 +495,7 @@ async def accept_task_completion(callback: CallbackQuery, state: FSMContext):
         admin, _ = await identify_user(user_id)
         
         if not admin.is_admin:
-            await callback.answer("У вас нет прав для проверки задач!", show_alert=True)
+            await callback.answer("You do not have access!", show_alert=True)
             return
         
         @sync_to_async
@@ -518,9 +518,9 @@ async def accept_task_completion(callback: CallbackQuery, state: FSMContext):
         # Notify all assignees
         for assignee in assignees:
             notification_text = (
-                f"✅ Ваша задача была проверена и принята!\n\n"
-                f"Название: {task.title}\n"
-                f"Время принятия: {task.completed_at.strftime('%d.%m.%Y %H:%M')}"
+                f"✅ Your task was check and confirmed!\n\n"
+                f"Name: {task.title}\n"
+                f"Time of confirmation: {task.completed_at.strftime('%m/%d/%Y %I:%M %p')}"
             )
             
             try:
@@ -531,15 +531,15 @@ async def accept_task_completion(callback: CallbackQuery, state: FSMContext):
         
         # Update UI for the admin
         await callback.message.edit_text(
-            f"✅ Задача '{task.title}' успешно принята!\n"
-            f"Исполнители были уведомлены о принятии задачи."
+            f"✅ Task '{task.title}' was confirmed!\n"
+            f"Assignees was notificated about that."
         )
-        await callback.answer("Задача принята")
+        await callback.answer("Task confirmed!")
         logger.info(f"Admin {user_id} accepted task {task_id}")
         
     except Exception as e:
         logger.error(f"Error in accept_task_completion for admin {user_id}: {str(e)}", exc_info=True)
-        await callback.answer("❌ Произошла ошибка при принятии задачи")
+        await callback.answer("❌ Error in confirmation of task")
 
 from datetime import timedelta
 @task_management_router.callback_query(F.data.startswith("request_revision:"))
@@ -558,17 +558,17 @@ async def request_task_revision(callback: CallbackQuery, state: FSMContext):
         now = datetime.now()
         for days in [1, 2, 3, 5, 7]:
             new_date = now + timedelta(days=days)
-            date_str = new_date.strftime("%d.%m.%Y")
+            date_str = new_date.strftime("%m/%d/%Y")
             keyboard.button(
                 text=f"{date_str}", 
                 callback_data=f"revision_date:{date_str}"
             )
         
-        keyboard.button(text="❌ Отмена", callback_data=f"cancel_review:{task_id}")
+        keyboard.button(text="❌ Cancel", callback_data=f"cancel_review:{task_id}")
         keyboard.adjust(3, 2, 1)
         
         await callback.message.edit_text(
-            "📅 Выберите новый дедлайн для доработки задачи или введите дату вручную в формате ДД.ММ.ГГГГ",
+            "📅 Choose new deadline date in format MM/DD/YYYY HH:MM",
             reply_markup=keyboard.as_markup()
         )
         await state.set_state(TaskStates.waiting_for_new_deadline)
@@ -576,7 +576,7 @@ async def request_task_revision(callback: CallbackQuery, state: FSMContext):
         
     except Exception as e:
         logger.error(f"Error in request_task_revision for admin {user_id}: {str(e)}", exc_info=True)
-        await callback.answer("❌ Произошла ошибка при отправке задачи на доработку")
+        await callback.answer("❌ Error occured in sending for review")
 
 
 @task_management_router.callback_query(F.data.startswith("revision_date:"))
@@ -586,17 +586,17 @@ async def set_revision_date_from_button(callback: CallbackQuery, state: FSMConte
     
     try:
         date_str = callback.data.split(":")[1]
-        date_obj = datetime.strptime(date_str, "%d.%m.%Y")
+        date_obj = datetime.strptime(date_str, "%m/%d/%Y")
         date_obj = date_obj.replace(hour=23, minute=59)
         
         # Now proceed with the comment request
         await state.update_data(new_deadline=date_obj)
         
         keyboard = InlineKeyboardBuilder()
-        keyboard.button(text="❌ Отмена", callback_data=f"cancel_review:{(await state.get_data())['task_id']}")
+        keyboard.button(text="❌ Cancel", callback_data=f"cancel_review:{(await state.get_data())['task_id']}")
         
         await callback.message.edit_text(
-            "💬 Напишите комментарий для исполнителя с пояснением, что нужно доработать:",
+            "💬 Commentary for task (what exactly needs to be reworked):",
             reply_markup=keyboard.as_markup()
         )
         await state.set_state(TaskStates.waiting_for_review_decision)
@@ -604,7 +604,7 @@ async def set_revision_date_from_button(callback: CallbackQuery, state: FSMConte
         
     except Exception as e:
         logger.error(f"Error in set_revision_date_from_button for admin {user_id}: {str(e)}", exc_info=True)
-        await callback.answer("❌ Произошла ошибка при установке новой даты")
+        await callback.answer("❌ Error occured")
 
 
 @task_management_router.message(TaskStates.waiting_for_new_deadline)
@@ -614,28 +614,28 @@ async def set_revision_date_manual(message: Message, state: FSMContext):
     
     try:
         # Parse the date
-        date_obj = datetime.strptime(message.text, "%d.%m.%Y")
+        date_obj = datetime.strptime(message.text, "%m/%d/%Y")
         date_obj = date_obj.replace(hour=23, minute=59)
         
         # Update state and request comment
         await state.update_data(new_deadline=date_obj)
         
         keyboard = InlineKeyboardBuilder()
-        keyboard.button(text="❌ Отмена", callback_data=f"cancel_review:{(await state.get_data())['task_id']}")
+        keyboard.button(text="❌ Cancel", callback_data=f"cancel_review:{(await state.get_data())['task_id']}")
         
         await message.answer(
-            "💬 Напишите комментарий для исполнителя с пояснением, что нужно доработать:",
+            "💬 Commentary for task (what exactly needs to be reworked):",
             reply_markup=keyboard.as_markup()
         )
         await state.set_state(TaskStates.waiting_for_review_decision)
         
     except ValueError:
         await message.answer(
-            "❌ Неверный формат даты. Используйте формат ДД.ММ.ГГГГ, например: 31.12.2023"
+            "❌ Incorrect data fomat. use -> MM/DD/YYYY",
         )
     except Exception as e:
         logger.error(f"Error in set_revision_date_manual for admin {user_id}: {str(e)}", exc_info=True)
-        await message.answer("❌ Произошла ошибка при установке новой даты")
+        await message.answer("❌ Error occured")
 
 
 @task_management_router.message(TaskStates.waiting_for_review_decision)
@@ -658,7 +658,7 @@ async def send_task_to_revision(message: Message, state: FSMContext):
             TaskComment.objects.create(
                 task=task,
                 user=admin,
-                text=f"Задача отправлена на доработку. {comment}"
+                text=f"Task send for rework. {comment}"
             )
             
             assignees = []
@@ -676,10 +676,10 @@ async def send_task_to_revision(message: Message, state: FSMContext):
         # Notify all assignees
         for assignee in assignees:
             notification_text = (
-                f"🔄 Ваша задача требует доработки!\n\n"
-                f"Название: {task.title}\n"
-                f"Новый дедлайн: {new_deadline.strftime('%d.%m.%Y %H:%M')}\n"
-                f"💬 Комментарий от проверяющего: {message.text}"
+                f"🔄 Your task needs to be reworked!\n\n"
+                f"Name: {task.title}\n"
+                f"New deadline: {new_deadline.strftime('%m/%d/%Y %I:%M %p')}\n"
+                f"💬 Commentary from checker: {message.text}"
             )
             
             try:
@@ -690,16 +690,16 @@ async def send_task_to_revision(message: Message, state: FSMContext):
         
         # Update UI for the admin
         await message.answer(
-            f"🔄 Задача '{task.title}' отправлена на доработку!\n"
-            f"Новый дедлайн: {new_deadline.strftime('%d.%m.%Y %H:%M')}\n"
-            f"Исполнители были уведомлены."
+            f"🔄 Task '{task.title}' send for rework!\n"
+            f"New deadline: {new_deadline.strftime('%m/%d/%Y %I:%M %p')}\n"
+            f"Assignees was notificated."
         )
         await state.clear()
         logger.info(f"Admin {user_id} sent task {task_id} to revision")
         
     except Exception as e:
         logger.error(f"Error in send_task_to_revision for admin {user_id}: {str(e)}", exc_info=True)
-        await message.answer("❌ Произошла ошибка при отправке задачи на доработку")
+        await message.answer("❌ Error in sending task to revision")
         await state.clear()
 
 
@@ -722,10 +722,10 @@ async def handle_back_to_task_list(callback: CallbackQuery, state: FSMContext):
 
     if user.is_admin:
         tasks = await get_admin_task_list()
-        text = "🗂 Все задачи:"
+        text = "🗂 All tasks:"
     else:
         tasks = await get_user_tasks(user)
-        text = "📋 Мои задачи:"
+        text = "📋 My tasks:"
 
     keyboard = get_task_list_keyboard(tasks)
     await safe_edit_message(callback.message, text, keyboard)
@@ -737,9 +737,9 @@ async def show_open_tasks(callback: CallbackQuery, state: FSMContext):
     tasks = await get_open_tasks()
     keyboard = get_task_list_open_keyboard(tasks)
     try:
-        await callback.message.edit_text("📥 Новые задачи:", reply_markup=keyboard)
+        await callback.message.edit_text("📥 New tasks:", reply_markup=keyboard)
     except Exception as e:
-        await callback.message.answer("📥 Новые задачи:", reply_markup=keyboard)
+        await callback.message.answer("📥 New tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -755,15 +755,15 @@ async def handle_task_pagination(callback: CallbackQuery, state: FSMContext):
 
     if not user.is_admin:
         tasks = await get_user_tasks(user, state_)
-        text = "📋 Мои задачи:"
+        text = "📋 My tasks:"
     elif filtered_user_id:
         logger.info(f"Getting user filtered tasks for user {filtered_user_id} with state {state_}")
         tasks = await get_user_filtered_tasks(filtered_user_id, state_)
         filtered_user = await sync_to_async(TelegramUser.objects.get)(telegram_id=filtered_user_id)
-        text = f"📋 Задачи пользователя {filtered_user.first_name}:"
+        text = f"📋 User's tasks {filtered_user.first_name}:"
     else:
         tasks = await get_admin_task_list(state=state_)
-        text = "📋 Все задачи:"
+        text = "📋 All tasks:"
 
     keyboard = get_task_list_keyboard(tasks, page=page, state=state_)
     await callback.message.edit_text(text, reply_markup=keyboard)
@@ -775,7 +775,7 @@ async def show_user_filter(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
 
     if not user.is_admin:
-        await callback.answer("У вас нет прав администратора!", show_alert=True)
+        await callback.answer("You do not have access!", show_alert=True)
         return
 
     @sync_to_async
@@ -788,7 +788,7 @@ async def show_user_filter(callback: CallbackQuery, state: FSMContext):
 
     users = await get_active_users()
     keyboard = get_user_filter_keyboard(users)
-    await callback.message.edit_text("👥 Выберите пользователя для фильтрации:", reply_markup=keyboard)
+    await callback.message.edit_text("👥 Choose user for filtration:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -803,7 +803,7 @@ async def show_filtered_tasks(callback: CallbackQuery, state: FSMContext):
 
     keyboard = get_task_list_keyboard(tasks, page=page)
     await callback.message.edit_text(
-        f"📋 Задачи пользователя {filtered_user.first_name}:",
+        f"📋 User's tasks {filtered_user.first_name}:",
         reply_markup=keyboard
     )
     await callback.answer()
@@ -814,7 +814,7 @@ async def clear_task_filter(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     tasks = await get_admin_task_list()
     keyboard = get_task_list_keyboard(tasks)
-    await callback.message.edit_text("📋 Все задачи:", reply_markup=keyboard)
+    await callback.message.edit_text("📋 All tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -832,7 +832,7 @@ async def handle_user_filter_pagination(callback: CallbackQuery, state: FSMConte
 
     users = await get_active_users()
     keyboard = get_user_filter_keyboard(users, page=page)
-    await callback.message.edit_text("👥 Выберите пользователя для фильтрации:", reply_markup=keyboard)
+    await callback.message.edit_text("👥 Choose user for filtration:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -841,12 +841,12 @@ async def show_completed_tasks(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
 
     if not user.is_admin:
-        await callback.answer("У вас нет прав администратора!", show_alert=True)
+        await callback.answer("You do not have access!", show_alert=True)
         return
 
     tasks = await get_completed_tasks()
     keyboard = get_task_list_keyboard(tasks)
-    await callback.message.edit_text("✅ Выполненные задачи:", reply_markup=keyboard)
+    await callback.message.edit_text("✅ Completed tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -855,12 +855,12 @@ async def show_overdue_tasks(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
 
     if not user.is_admin:
-        await callback.answer("У вас нет прав администратора!", show_alert=True)
+        await callback.answer("You do not have access!", show_alert=True)
         return
 
     tasks = await get_overdue_tasks()
     keyboard = get_task_list_keyboard(tasks)
-    await callback.message.edit_text("⏰ Просроченные задачи:", reply_markup=keyboard)
+    await callback.message.edit_text("⏰ Overdue tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -869,7 +869,7 @@ async def show_user_completed_tasks(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
     tasks = await get_user_completed_tasks(user)
     keyboard = get_task_list_keyboard(tasks)
-    await callback.message.edit_text("✅ Мои выполненные задачи:", reply_markup=keyboard)
+    await callback.message.edit_text("✅ My completed tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -878,7 +878,7 @@ async def show_user_overdue_tasks(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
     tasks = await get_user_overdue_tasks(user)
     keyboard = get_task_list_keyboard(tasks)
-    await callback.message.edit_text("⏰ Мои просроченные задачи:", reply_markup=keyboard)
+    await callback.message.edit_text("⏰ My overdue tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -887,7 +887,7 @@ async def show_my_tasks(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
     tasks = await get_user_tasks(user)
     keyboard = get_task_list_keyboard(tasks)
-    await callback.message.edit_text("📋 Мои задачи:", reply_markup=keyboard)
+    await callback.message.edit_text("📋 My tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -902,7 +902,7 @@ async def handle_delete_task(callback: CallbackQuery, state: FSMContext):
         
         if not user.is_admin:
             logger.warning(f"Unauthorized delete attempt by user {user_id}")
-            await callback.answer("У вас нет прав администратора!", show_alert=True)
+            await callback.answer("You do not have access!", show_alert=True)
             return
             
         @sync_to_async
@@ -919,15 +919,15 @@ async def handle_delete_task(callback: CallbackQuery, state: FSMContext):
         tasks = await get_admin_task_list()
         keyboard = get_task_list_keyboard(tasks)
         await callback.message.edit_text(
-            f"✅ Задача «{task_title}» удалена\n\n"
-            "📋 Все задачи:",
+            f"✅ Task «{task_title}» deleted\n\n"
+            "📋 All tasks:",
             reply_markup=keyboard
         )
-        await callback.answer("Задача успешно удалена")
+        await callback.answer("Task successfully deleted")
         
     except Exception as e:
         logger.error(f"Error in handle_delete_task for user {user_id}: {str(e)}", exc_info=True)
-        await callback.answer("❌ Произошла ошибка при удалении задачи")
+        await callback.answer("❌ Error in deleting task")
 
 from robot.models import TaskAssignment
 @sync_to_async
@@ -990,10 +990,10 @@ async def accept_task(callback: CallbackQuery, state: FSMContext):
             
             creator_id = await get_creator(task)
             admin_notification = (
-                f"✅ Пользователь принял задание!\n\n"
-                f"Задание: {task.title}\n"
-                f"Исполнитель: {user.first_name}\n"
-                f"Время принятия: {timezone.now().astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M')}"
+                f"✅ User confirm task!\n\n"
+                f"Task: {task.title}\n"
+                f"Assignee: {user.first_name}\n"
+                f"Time of comfirmation: {timezone.now().astimezone(ZoneInfo('Europe/Moscow')).strftime('%m/%d/%Y %I:%M %p')}"
             )
             
             try:
@@ -1004,27 +1004,27 @@ async def accept_task(callback: CallbackQuery, state: FSMContext):
             
             # Update UI for the user
             await callback.message.edit_text(
-                f"✅ Вы приняли задание!\n\n"
-                f"Задание: {task.title}\n"
-                f"Срок выполнения: {task.deadline.strftime('%d.%m.%Y %H:%M')}"
+                f"✅ You confirmed task!\n\n"
+                f"Task: {task.title}\n"
+                f"Deadline: {task.deadline.strftime('%m/%d/%Y %I:%M %p')}"
             )
-            await callback.answer("✅ Задание успешно принято!")
+            await callback.answer("✅ Task successfully became in progress!")
             logger.info(f"User {user_id} accepted task {task_id}")
         elif task:
-            await callback.answer("Это задание уже принято вами ранее.")
+            await callback.answer("You have been confirmed this task.")
             logger.info(f"User {user_id} attempted to accept already accepted task {task_id}")
         else:
-            await callback.answer("❌ Произошла ошибка при принятии задания")
+            await callback.answer("❌ Error occured in accepting task")
             logger.warning(f"Failed to accept task {task_id} for user {user_id}")
     
     except Exception as e:
         logger.error(f"Error in accept_task for user {user_id}: {str(e)}", exc_info=True)
-        await callback.answer("❌ Произошла ошибка при принятии задания")
+        await callback.answer("❌ Error occured in accepting task")
 
 @task_management_router.callback_query(F.data.startswith("cancel_review:"))
 async def cancel_review(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Проверка задачи отменена")
+    await callback.message.edit_text("❌ Check canceled")
     await callback.answer()
 
 
@@ -1034,10 +1034,10 @@ async def show_submitted_tasks(callback: CallbackQuery, state: FSMContext):
 
     if user.is_admin:
         tasks = await get_admin_task_list("submitted_tasks")
-        text = "📤 Все задачи на проверке:"
+        text = "📤 Tasks on check:"
     else:
         tasks = await get_user_tasks(user, "user_submitted_tasks")
-        text = "📤 Мои задачи на проверке:"
+        text = "📤 My tasks on check:"
 
     keyboard = get_task_list_keyboard(tasks, state="submitted_tasks")
     await callback.message.edit_text(text, reply_markup=keyboard)
@@ -1050,10 +1050,10 @@ async def show_revision_tasks(callback: CallbackQuery, state: FSMContext):
 
     if user.is_admin:
         tasks = await get_admin_task_list("revision_tasks")
-        text = "🔄 Все задачи на доработке:"
+        text = "🔄 Tasks on rework:"
     else:
         tasks = await get_user_tasks(user, "user_revision_tasks")
-        text = "🔄 Мои задачи на доработке:"
+        text = "🔄 My tasks on rework:"
 
     keyboard = get_task_list_keyboard(tasks, state="revision_tasks")
     await callback.message.edit_text(text, reply_markup=keyboard)

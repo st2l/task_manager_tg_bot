@@ -23,11 +23,11 @@ async def handle_admin_tasks(callback: CallbackQuery):
     user, _ = await identify_user(callback.from_user.id)
     
     if not user.is_admin:
-        await callback.answer("У вас нет прав администратора!", show_alert=True)
+        await callback.answer("You do not have access!", show_alert=True)
         return
 
     keyboard = get_admin_task_list_keyboard()
-    await callback.message.edit_text("🗂 Управление задачами:", reply_markup=keyboard)
+    await callback.message.edit_text("🗂 Task management:", reply_markup=keyboard)
     await callback.answer()
 
 @admin_router.callback_query(F.data == "statistics")
@@ -40,7 +40,7 @@ async def handle_admin_statistics(callback: CallbackQuery):
         
         if not user.is_admin:
             logger.warning(f"Unauthorized statistics access attempt by user {user_id}")
-            await callback.answer("У вас нет прав администратора!", show_alert=True)
+            await callback.answer("You do not have access!", show_alert=True)
             return
 
         @sync_to_async
@@ -61,12 +61,12 @@ async def handle_admin_statistics(callback: CallbackQuery):
         logger.info(f"Retrieved statistics: {stats}")
         
         stats_text = (
-            "📊 Статистика:\n\n"
-            f"📝 Всего задач: {stats['total_tasks']}\n"
-            f"▫️ Активных: {stats['active_tasks']}\n"
-            f"✅ Завершённых: {stats['completed_tasks']}\n"
-            f"⚠️ Просроченных: {stats['overdue_tasks']}\n"
-            f"👥 Активных пользователей: {stats['users_count']}"
+            "📊 Statistics:\n\n"
+            f"📝 Total tasks: {stats['total_tasks']}\n"
+            f"▫️ Active tasks: {stats['active_tasks']}\n"
+            f"✅ Completed: {stats['completed_tasks']}\n"
+            f"⚠️ Overdue: {stats['overdue_tasks']}\n"
+            f"👥 Active users: {stats['users_count']}"
         )
         
         keyboard = get_admin_statistics_keyboard()
@@ -76,22 +76,22 @@ async def handle_admin_statistics(callback: CallbackQuery):
         
     except Exception as e:
         logger.error(f"Error in handle_admin_statistics for user {user_id}: {str(e)}", exc_info=True)
-        await callback.answer("Произошла ошибка при загрузке статистики")
+        await callback.answer("Error in loading statistics")
 
 @admin_router.callback_query(F.data == "settings")
 async def handle_admin_settings(callback: CallbackQuery):
     user, _ = await identify_user(callback.from_user.id)
     
     if not user.is_admin:
-        await callback.answer("У вас нет прав администратора!", show_alert=True)
+        await callback.answer("You do not have access", show_alert=True)
         return
 
     settings_text = (
-        "⚙️ Настройки администратора:\n\n"
-        f"🔔 Уведомления: {'Включены' if user.notification_enabled else 'Выключены'}\n"
-        "👥 Управление пользователями\n"
-        "📝 Настройка шаблонов\n"
-        "⏰ Настройка напоминаний"
+        "⚙️ Admint settings:\n\n"
+        f"🔔 Notifications: {'ON' if user.notification_enabled else 'OFF'}\n"
+        "👥 Users management\n"
+        "📝 Template settings\n"
+        "⏰ Notification settings\n"
     )
     
     keyboard = get_admin_settings_keyboard()
@@ -118,7 +118,7 @@ async def show_users_menu(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
     
     if not user.is_admin:
-        await callback.answer("У вас нет прав администратора!", show_alert=True)
+        await callback.answer("You do not have access!", show_alert=True)
         return
     
     @sync_to_async
@@ -168,11 +168,11 @@ async def show_user_stats(callback: CallbackQuery, state: FSMContext):
     user, stats = await get_user_with_stats()
     
     stats_text = (
-        f"📊 Статистика пользователя {user.first_name}:\n\n"
-        f"✅ Выполнено задач: {stats['completed_tasks']}\n"
-        f"⏰ Просрочено: {stats['overdue_tasks']}\n"
-        f"📝 В работе: {stats['in_progress_tasks']}\n"
-        f"📋 Всего назначено: {stats['total_assigned']}"
+        f"📊 User statistics {user.first_name}:\n\n"
+        f"✅ Completed tasks: {stats['completed_tasks']}\n"
+        f"⏰ Overdue tasks: {stats['overdue_tasks']}\n"
+        f"📝 In work: {stats['in_progress_tasks']}\n"
+        f"📋 All assigned: {stats['total_assigned']}"
     )
     
     keyboard = get_user_stats_keyboard()
@@ -193,5 +193,5 @@ async def handle_users_pagination(callback: CallbackQuery, state: FSMContext):
     
     users = await get_regular_users()
     keyboard = get_users_list_keyboard(users, page=page)
-    await callback.message.edit_text("👥 Список пользователей:", reply_markup=keyboard)
+    await callback.message.edit_text("👥 Users list:", reply_markup=keyboard)
     await callback.answer() 

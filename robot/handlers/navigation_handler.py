@@ -18,10 +18,10 @@ async def handle_back_to_main(callback: CallbackQuery, state: FSMContext):
     
     # Формируем текст и клавиатуру в зависимости от прав пользователя
     if user.is_admin:
-        text = "🎛 Главное меню администратора:"
+        text = "🎛 Admin's main menu:"
         keyboard = get_admin_keyboard()
     else:
-        text = "📱 Главное меню:"
+        text = "📱 Main menu:"
         keyboard = get_user_keyboard()
     
     # Обновляем сообщение
@@ -38,10 +38,10 @@ async def handle_back_to_tasks(callback: CallbackQuery, state: FSMContext):
     
     if user.is_admin:
         keyboard = get_task_management_keyboard()
-        text = "🗂 Управление задачами:"
+        text = "🗂 Task management:"
     else:
         keyboard = get_user_keyboard()
-        text = "📋 Мои задачи:"
+        text = "📋 My tasks:"
     
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer() 

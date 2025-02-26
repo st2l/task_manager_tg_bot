@@ -6,10 +6,10 @@ from asgiref.sync import sync_to_async
 
 def get_assignment_type_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="👤 Индивидуальная задача", callback_data="individual_task")
-    builder.button(text="👥 Групповая задача (всем в группе)", callback_data="group_task")
-    builder.button(text="👥 Групповая задача (выбрать определенных исполнителей)", callback_data="multi_task")
-    builder.button(text="❌ Отмена", callback_data="cancel_creation")
+    builder.button(text="👤 Individual Task", callback_data="individual_task")
+    builder.button(text="👥 Group Task (to everyone in the group)", callback_data="group_task")
+    builder.button(text="👥 Group Task (select specific executors)", callback_data="multi_task")
+    builder.button(text="❌ Cancel", callback_data="cancel_creation")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -29,8 +29,8 @@ def get_users_keyboard() -> InlineKeyboardMarkup:
             callback_data=f"assign_user:{user.telegram_id}"
         )
     
-    builder.button(text="🔓 Оставить открытой", callback_data="leave_open")
-    builder.button(text="❌ Отмена", callback_data="cancel_creation")
+    builder.button(text="🔓 Leave Open", callback_data="leave_open")
+    builder.button(text="❌ Cancel", callback_data="cancel_creation")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -65,16 +65,16 @@ def get_multi_users_keyboard(selected_users=None, page=0, page_size=8) -> Inline
     # Navigation row
     if total_pages > 1:
         if page > 0:
-            builder.button(text="◀️ Назад", callback_data=f"multi_page:{page-1}")
+            builder.button(text="◀️ Back", callback_data=f"multi_page:{page-1}")
         
         builder.button(text=f"📄 {page+1}/{total_pages}", callback_data="ignore")
         
         if page < total_pages - 1:
-            builder.button(text="▶️ Вперед", callback_data=f"multi_page:{page+1}")
+            builder.button(text="▶️ Next", callback_data=f"multi_page:{page+1}")
     
     # Control row
-    builder.button(text="✅ Завершить выбор", callback_data="multi_confirm")
-    builder.button(text="❌ Отмена", callback_data="cancel_creation")
+    builder.button(text="✅ Finish Selection", callback_data="multi_confirm")
+    builder.button(text="❌ Cancel", callback_data="cancel_creation")
     
     # Adjust the layout
     builder.adjust(2)
@@ -83,15 +83,15 @@ def get_multi_users_keyboard(selected_users=None, page=0, page_size=8) -> Inline
 
 def get_media_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="➡️ Пропустить", callback_data="skip_media")
-    builder.button(text="❌ Отмена", callback_data="cancel_creation")
+    builder.button(text="➡️ Skip", callback_data="skip_media")
+    builder.button(text="❌ Cancel", callback_data="cancel_creation")
     builder.adjust(1)
     return builder.as_markup()
 
 
 def get_confirm_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Подтвердить", callback_data="confirm_task")
-    builder.button(text="❌ Отменить", callback_data="cancel_creation")
+    builder.button(text="✅ Confirm", callback_data="confirm_task")
+    builder.button(text="❌ Cancel", callback_data="cancel_creation")
     builder.adjust(2)
     return builder.as_markup()

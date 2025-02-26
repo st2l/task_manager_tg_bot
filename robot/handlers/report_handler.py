@@ -57,7 +57,7 @@ async def export_to_sheets():
         week_ago = now - timedelta(days=7)
         tasks = Task.objects.filter(created_at__gte=week_ago).select_related('assignee')
         
-        data = [['Название', 'Статус', 'Исполнитель', 'Создано', 'Дедлайн', 'Выполнено']]
+        data = [['Name', 'Status', 'Assignee', 'Creted by', 'Deadline', 'Completed at']]
         for task in tasks:
             data.append([
                 task.title,
@@ -84,13 +84,12 @@ async def show_reports_menu(callback: CallbackQuery):
     stats = await get_weekly_stats()
     
     report_text = (
-        "📊 Еженедельный отчет:\n\n"
-        f"📝 Новых задач: {stats['new_tasks']}\n"
-        f"▫️ Активных задач: {stats['active_tasks']}\n"
-        f"✅ Выполнено за неделю: {stats['completed_tasks']}\n"
-        f"⚠️ Просрочено за неделю: {stats['overdue_tasks']}\n\n"
-        "📎 Для выгрузки детального отчета в Google Sheets\n"
-        "нажмите соответствующую кнопку ниже"
+        "📊 Weekly stats:\n\n"
+        f"📝 New tasks: {stats['new_tasks']}\n"
+        f"▫️ Active tasks: {stats['active_tasks']}\n"
+        f"✅ Completed in a week: {stats['completed_tasks']}\n"
+        f"⚠️ Overdue in a week: {stats['overdue_tasks']}\n\n"
+        "📎 For dump to Google Sheet press below\n"
     )
     
     keyboard = get_report_keyboard()
@@ -107,16 +106,16 @@ async def handle_export_report(callback: CallbackQuery):
         
         if not user.is_admin:
             logger.warning(f"Unauthorized report export attempt by user {user_id}")
-            await callback.answer("У вас нет прав администратора!", show_alert=True)
+            await callback.answer("You do not have access!", show_alert=True)
             return
         
-        await callback.answer("⏳ Подождите, идет формирование отчета...")
+        await callback.answer("⏳ Wait for a dump to sheet...")
         logger.info(f"Starting report export for admin {user_id}")
         
         await export_to_sheets()
         logger.info(f"Successfully exported report to sheets for admin {user_id}")
-        await callback.message.answer("✅ Отчет успешно выгружен в Google Sheets!")
+        await callback.message.answer("✅ Stats are in Google Sheets!")
         
     except Exception as e:
         logger.error(f"Error in handle_export_report for user {user_id}: {str(e)}", exc_info=True)
-        await callback.message.answer("❌ Ошибка при выгрузке отчета. Попробуйте позже.") 
+        await callback.message.answer("❌ Erropr while exporting report!") 

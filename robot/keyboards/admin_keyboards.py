@@ -3,33 +3,33 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 def get_admin_settings_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="👥 Управление пользователями", callback_data="manage_users")
-    builder.button(text="🔔 Настройка уведомлений", callback_data="notification_settings")
-    builder.button(text="📝 Шаблоны сообщений", callback_data="message_templates")
-    builder.button(text="📊 Экспорт данных", callback_data="export_data")
-    builder.button(text="◀️ Назад", callback_data="back_to_main")
+    builder.button(text="👥 User Management", callback_data="manage_users")
+    builder.button(text="🔔 Notification Settings", callback_data="notification_settings")
+    builder.button(text="📝 Message Templates", callback_data="message_templates")
+    builder.button(text="📊 Data Export", callback_data="export_data")
+    builder.button(text="◀️ Back", callback_data="back_to_main")
     builder.adjust(2)
     return builder.as_markup()
 
 def get_admin_task_list_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="📝 Создать задачу", callback_data="create_task")
-    builder.button(text="📋 Все задачи", callback_data="my_tasks")
-    builder.button(text="📤 На проверке", callback_data="submitted_tasks")
-    builder.button(text="🔄 На доработке", callback_data="revision_tasks")
-    builder.button(text="👤 Фильтр по пользователю", callback_data="filter_by_user")
-    builder.button(text="⏰ Просроченные", callback_data="overdue_tasks")
-    builder.button(text="✅ Выполненные", callback_data="completed_tasks")
-    builder.button(text="◀️ Назад", callback_data="back_to_main")
+    builder.button(text="📝 Create Task", callback_data="create_task")
+    builder.button(text="📋 All Tasks", callback_data="my_tasks")
+    builder.button(text="📤 Under Review", callback_data="submitted_tasks")
+    builder.button(text="🔄 In Revision", callback_data="revision_tasks")
+    builder.button(text="👤 Filter by User", callback_data="filter_by_user")
+    builder.button(text="⏰ Overdue", callback_data="overdue_tasks")
+    builder.button(text="✅ Completed", callback_data="completed_tasks")
+    builder.button(text="◀️ Back", callback_data="back_to_main")
     builder.adjust(2)
     return builder.as_markup()
 
 def get_admin_statistics_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="📊 Подробный отчёт", callback_data="detailed_stats")
-    builder.button(text="📅 За неделю", callback_data="weekly_stats")
-    builder.button(text="📈 За месяц", callback_data="monthly_stats")
-    builder.button(text="◀️ Назад", callback_data="back_to_main")
+    builder.button(text="📊 Detailed Report", callback_data="detailed_stats")
+    builder.button(text="📅 Weekly", callback_data="weekly_stats")
+    builder.button(text="📈 Monthly", callback_data="monthly_stats")
+    builder.button(text="◀️ Back", callback_data="back_to_main")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -57,21 +57,21 @@ def get_users_list_keyboard(users, page=1, items_per_page=5) -> InlineKeyboardMa
     if nav_buttons:
         builder.row(*nav_buttons)
     
-    builder.button(text="◀️ Назад", callback_data="back_to_main")
+    builder.button(text="◀️ Back", callback_data="back_to_main")
     builder.adjust(1)
     return builder.as_markup()
 
 def get_user_stats_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="👥 К списку пользователей", callback_data="users")
-    builder.button(text="◀️ В главное меню", callback_data="back_to_main")
+    builder.button(text="👥 To Users List", callback_data="users")
+    builder.button(text="◀️ To Main Menu", callback_data="back_to_main")
     builder.adjust(1)
     return builder.as_markup()
 
 def get_admin_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="📝 Управление задачами", callback_data="tasks")
-    builder.button(text="👥 Пользователи", callback_data="users")
-    builder.button(text="📊 Отчеты", callback_data="reports")
+    builder.button(text="📝 Task Management", callback_data="tasks")
+    builder.button(text="👥 Users", callback_data="users")
+    builder.button(text="📊 Reports", callback_data="reports")
     builder.adjust(2)
     return builder.as_markup()
