@@ -57,7 +57,9 @@ class Task(models.Model):
     description = models.TextField()
     creator = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='created_tasks')
     assignee = models.ForeignKey(TelegramUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_tasks')
+    assignees = models.ManyToManyField(TelegramUser, through='TaskAssignment', related_name='multi_assigned_tasks')
     is_group_task = models.BooleanField(default=False)
+    is_multi_task = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     deadline = models.DateTimeField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
@@ -81,6 +83,25 @@ class Task(models.Model):
         if self.status in ['completed', 'overdue']:
             return False
         return self.deadline < timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
+
+
+class TaskAssignment(models.Model):
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='assignments')
+    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE)
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        unique_together = ['task', 'user']
+    
+    def mark_completed(self):
+        self.completed = True
+        self.completed_at = timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
+        self.save()
+    
+    def __str__(self):
+        return f"{self.user.first_name} - {self.task.title}"
 
 
 class TaskComment(models.Model):

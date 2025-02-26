@@ -6,12 +6,13 @@ import os
 from ..keyboards.task_creation_keyboards import (
     get_assignment_type_keyboard,
     get_users_keyboard,
+    get_multi_users_keyboard,
     get_media_keyboard,
     get_confirm_keyboard
 )
 from ..keyboards.task_keyboards import get_task_action_keyboard, get_open_task_keyboard, get_group_task_keyboard, get_personal_task_keyboard
 from ..states.task_states import TaskCreation
-from ..models import Task, TelegramUser
+from ..models import Task, TelegramUser, TaskAssignment
 from ..utils import identify_user
 from ..utils.message_utils import safe_edit_message
 from asgiref.sync import sync_to_async
@@ -90,7 +91,7 @@ async def process_deadline(message: Message, state: FSMContext):
         keyboard = get_assignment_type_keyboard()
         await message.answer("👥 Выберите тип назначения:", reply_markup=keyboard)
     except ValueError:
-        await message.answer("❌ Неверный формат даты. Попробуйте еще раз в формате ДД.ММ.ГГГГ ЧЧ:ММ")
+        await message.answer("❌ Неверный формат даты. Попробуйте еще раз в формате ДД.М.ГГГГ ЧЧ:ММ")
 
 
 @task_creation_router.callback_query(F.data == "individual_task")
@@ -108,6 +109,81 @@ async def process_group_task(callback: CallbackQuery, state: FSMContext):
     keyboard = get_media_keyboard()
     await state.set_state(TaskCreation.waiting_for_media)
     await callback.message.edit_text("📎 Прикрепите медиафайл (фото/видео) или пропустите этот шаг:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_creation_router.callback_query(F.data == "multi_task")
+async def process_multi_task(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(is_multi_task=True, is_group_task=False, selected_users=[])
+    
+    # Initialize the pagination state
+    await state.update_data(page=0)
+    
+    # Get and set the multi-user selection keyboard
+    keyboard = await get_multi_users_keyboard()
+    await state.set_state(TaskCreation.selecting_assignees)
+    await callback.message.edit_text("👥 Выберите исполнителей задачи:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_creation_router.callback_query(F.data.startswith("multi_select:"))
+async def handle_user_selection(callback: CallbackQuery, state: FSMContext):
+    user_id = int(callback.data.split(":")[1])
+    
+    # Get current state data
+    data = await state.get_data()
+    selected_users = data.get('selected_users', [])
+    current_page = data.get('page', 0)
+    
+    # Toggle user selection
+    if user_id in selected_users:
+        selected_users.remove(user_id)
+    else:
+        selected_users.append(user_id)
+    
+    # Update state with new selection
+    await state.update_data(selected_users=selected_users)
+    
+    # Update the keyboard with new selection state
+    keyboard = await get_multi_users_keyboard(selected_users, current_page)
+    await callback.message.edit_text("👥 Выберите исполнителей задачи:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_creation_router.callback_query(F.data.startswith("multi_page:"))
+async def handle_pagination(callback: CallbackQuery, state: FSMContext):
+    new_page = int(callback.data.split(":")[1])
+    
+    # Get current state data
+    data = await state.get_data()
+    selected_users = data.get('selected_users', [])
+    
+    # Update state with new page
+    await state.update_data(page=new_page)
+    
+    # Update the keyboard with new page
+    keyboard = await get_multi_users_keyboard(selected_users, new_page)
+    await callback.message.edit_text("👥 Выберите исполнителей задачи:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_creation_router.callback_query(F.data == "multi_confirm")
+async def confirm_multi_selection(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    selected_users = data.get('selected_users', [])
+    
+    if not selected_users:
+        await callback.answer("❌ Выберите хотя бы одного исполнителя!", show_alert=True)
+        return
+    
+    keyboard = get_media_keyboard()
+    await state.set_state(TaskCreation.waiting_for_media)
+    await callback.message.edit_text("📎 Прикрепите медиафайл (фото/видео) или пропустите этот шаг:", reply_markup=keyboard)
+    await callback.answer()
+
+
+@task_creation_router.callback_query(F.data == "ignore")
+async def ignore_callback(callback: CallbackQuery):
     await callback.answer()
 
 
@@ -192,8 +268,62 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
         f"👤 Создал: {task.creator.first_name}"
     )
 
+    # For multi-task (multiple assignees)
+    if task.is_multi_task:
+        task_type = "👥 Задача для выбранных пользователей"
+        
+        # Get assignees from database
+        @sync_to_async
+        def get_task_assignments(task):
+            return list(task.assignments.all())
+
+        @sync_to_async
+        def get_user_first_name(assignment):
+            return assignment.user.username
+
+        @sync_to_async
+        def get_user_telegram_id(assignment):
+            return assignment.user.telegram_id
+
+        # Get assignments from database
+        assignments = await get_task_assignments(task)
+        assignees_names = []
+        for assignment in assignments:
+            name = await get_user_first_name(assignment)
+            assignees_names.append(name)
+        assignees_names = [assignment.user.first_name for assignment in assignments]
+        assignees_text = ", ".join(assignees_names)
+        
+        group_text = f"{task_type}\n\n{task_text}\n\nИсполнители: {assignees_text}"
+        
+        # Send to group chat
+        if task.media_file_id:
+            if task.media_type == 'photo':
+                await bot.send_photo(group_id, task.media_file_id, caption=group_text)
+            else:
+                await bot.send_video(group_id, task.media_file_id, caption=group_text)
+        else:
+            await bot.send_message(group_id, group_text)
+        
+        # Send to individual assignees
+        keyboard = get_personal_task_keyboard()
+        personal_text = (
+            f"👤 Вам назначена новая задача!\n\n{task_text}\n\n"
+            "Пожалуйста, ознакомьтесь и приступите к выполнению."
+        )
+        
+        for assignment in assignments:
+            user_id = assignment.user.telegram_id
+            if task.media_file_id:
+                if task.media_type == 'photo':
+                    await bot.send_photo(user_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
+                else:
+                    await bot.send_video(user_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
+            else:
+                await bot.send_message(user_id, personal_text, reply_markup=keyboard)
+    
     # Для открытой задачи
-    if data.get('is_open_task'):
+    elif data.get('is_open_task'):
         task_type = "🔓 Открытая задача"
         group_text = f"{task_type}\n\n{task_text}"
         keyboard = get_open_task_keyboard(task.id)
@@ -245,36 +375,43 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
 @sync_to_async
 def create_new_task(data, creator):
     logging.info(f"Creating new task with data: {data}")
-    # deadline = datetime.strptime(data['deadline'], '%Y-%m-%d %H:%M')
-    # deadline = timezone.make_aware(deadline, timezone=ZoneInfo("Europe/Moscow"))
-    try:
-        asignee = TelegramUser.objects.get(telegram_id=data['assignee_id'])
-    except Exception as e:
-        asignee = None
     
-    if data.get('is_open_task'):
-        task = Task.objects.create(
-            title=data['title'],
-            description=data['description'],
-            creator=creator,
-            deadline=data['deadline'],
-            is_group_task=data['is_group_task'],
-            assignee=asignee,
-            media_file_id=data.get('media_file_id', None),
-            media_type=data.get('media_type', None),
-        )
+    # Handle regular assignee for individual tasks
+    if not data.get('is_group_task') and not data.get('is_multi_task'):
+        try:
+            assignee = TelegramUser.objects.get(telegram_id=data['assignee_id']) if 'assignee_id' in data else None
+        except Exception as e:
+            assignee = None
     else:
-        task = Task.objects.create(
-            title=data['title'],
-            description=data['description'],
-            creator=creator,
-            deadline=data['deadline'],
-            is_group_task=data['is_group_task'],
-            assignee=asignee,
-            media_file_id=data.get('media_file_id', None),
-            media_type=data.get('media_type', None),
-            status='assigned'
-        )
+        assignee = None
+    
+    task_status = 'open'
+    if not data.get('is_group_task') and not data.get('is_open_task'):
+        task_status = 'assigned'
+    
+    # Create the task
+    task = Task.objects.create(
+        title=data['title'],
+        description=data['description'],
+        creator=creator,
+        deadline=data['deadline'],
+        is_group_task=data.get('is_group_task', False),
+        is_multi_task=data.get('is_multi_task', False),
+        assignee=assignee,
+        media_file_id=data.get('media_file_id', None),
+        media_type=data.get('media_type', None),
+        status=task_status,
+    )
+    
+    # Handle multiple assignees for multi-tasks
+    if data.get('is_multi_task') and 'selected_users' in data:
+        for user_id in data['selected_users']:
+            try:
+                user = TelegramUser.objects.get(telegram_id=user_id)
+                TaskAssignment.objects.create(task=task, user=user)
+            except Exception as e:
+                logging.error(f"Error creating task assignment: {e}")
+    
     return task
 
 
@@ -284,10 +421,27 @@ def get_task_preview(data):
         f"📝 Название: {data['title']}\n"
         f"📄 Описание: {data['description']}\n"
         f"📅 Дедлайн: {data['deadline'].strftime('%d.%m.%Y %H:%M')}\n"
-        f"👥 Тип: {'Групповая' if data.get('is_group_task') else 'Индивидуальная'}"
     )
     
-    if not data.get('is_group_task'):
+    if data.get('is_group_task'):
+        preview_text += "👥 Тип: Групповая (для всех участников группы)"
+    elif data.get('is_multi_task'):
+        preview_text += "👥 Тип: Мультизадача (для выбранных пользователей)"
+        
+        # Add selected users info
+        if 'selected_users' in data and data['selected_users']:
+            selected_users = []
+            for user_id in data['selected_users']:
+                try:
+                    user = TelegramUser.objects.get(telegram_id=user_id)
+                    selected_users.append(user.first_name)
+                except Exception:
+                    pass
+            
+            if selected_users:
+                preview_text += f"\n👤 Исполнители: {', '.join(selected_users)}"
+    else:
+        preview_text += "👤 Тип: Индивидуальная"
         if data.get('is_open_task'):
             preview_text += "\n🔓 Открытая для выполнения"
         elif data.get('assignee_id'):
@@ -332,4 +486,4 @@ async def create_task(callback: CallbackQuery, state: FSMContext):
 async def cancel_creation(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text("❌ Создание задачи отменено")
-    await callback.answer() 
+    await callback.answer()

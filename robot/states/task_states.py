@@ -9,6 +9,7 @@ class TaskCreation(StatesGroup):
     waiting_for_assignee = State()  # только для индивидуальных
     waiting_for_media = State()
     confirm_creation = State()
+    selecting_assignees = State()  # только для групповых
 
 
 class TaskComment(StatesGroup):

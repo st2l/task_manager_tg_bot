@@ -35,6 +35,52 @@ def get_users_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+@sync_to_async
+def get_multi_users_keyboard(selected_users=None, page=0, page_size=8) -> InlineKeyboardMarkup:
+    if selected_users is None:
+        selected_users = []
+    
+    builder = InlineKeyboardBuilder()
+    
+    users = list(TelegramUser.objects.filter(
+        is_active=True, 
+        is_bot=False,
+        is_admin=False
+    ))
+    
+    total_pages = (len(users) + page_size - 1) // page_size
+    start_index = page * page_size
+    end_index = min((page + 1) * page_size, len(users))
+    
+    visible_users = users[start_index:end_index]
+    
+    for user in visible_users:
+        is_selected = user.telegram_id in selected_users
+        prefix = "✅ " if is_selected else "👤 "
+        builder.button(
+            text=f"{prefix}{user.first_name}", 
+            callback_data=f"multi_select:{user.telegram_id}"
+        )
+    
+    # Navigation row
+    if total_pages > 1:
+        if page > 0:
+            builder.button(text="◀️ Назад", callback_data=f"multi_page:{page-1}")
+        
+        builder.button(text=f"📄 {page+1}/{total_pages}", callback_data="ignore")
+        
+        if page < total_pages - 1:
+            builder.button(text="▶️ Вперед", callback_data=f"multi_page:{page+1}")
+    
+    # Control row
+    builder.button(text="✅ Завершить выбор", callback_data="multi_confirm")
+    builder.button(text="❌ Отмена", callback_data="cancel_creation")
+    
+    # Adjust the layout
+    builder.adjust(2)
+    return builder.as_markup()
+
+
 def get_media_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="➡️ Пропустить", callback_data="skip_media")
@@ -48,4 +94,4 @@ def get_confirm_keyboard() -> InlineKeyboardMarkup:
     builder.button(text="✅ Подтвердить", callback_data="confirm_task")
     builder.button(text="❌ Отменить", callback_data="cancel_creation")
     builder.adjust(2)
-    return builder.as_markup() 
+    return builder.as_markup()
