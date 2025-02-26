@@ -98,6 +98,15 @@ class Task(models.Model):
 
 
 class TaskAssignment(models.Model):
+    STATUS_CHOICES = [
+        ('assigned', 'Assigned'),
+        ('in_progress', 'In Progress'),
+        ('submitted', 'Submitted'),
+        ('completed', 'Completed'),
+        ('revision', 'Revision'),
+        ('overdue', 'Overdue'),
+    ]
+
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='assignments')
     user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE)
     assigned_at = models.DateTimeField(auto_now_add=True)
@@ -105,20 +114,33 @@ class TaskAssignment(models.Model):
     accepted_at = models.DateTimeField(null=True, blank=True)
     completed = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
-    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='assigned')
+
     class Meta:
         unique_together = ['task', 'user']
-    
+
     def mark_accepted(self):
         self.accepted = True
         self.accepted_at = timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
+        self.status = 'in_progress'
         self.save()
-    
+
     def mark_completed(self):
         self.completed = True
         self.completed_at = timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
+        self.status = 'completed'
         self.save()
-    
+
+    def mark_submitted(self):
+        self.status = 'submitted'
+        self.save()
+
+    def mark_revision(self, new_deadline=None):
+        self.status = 'revision'
+        if new_deadline:
+            self.task.deadline = new_deadline
+        self.save()
+
     def __str__(self):
         return f"{self.user.first_name} - {self.task.title}"
 

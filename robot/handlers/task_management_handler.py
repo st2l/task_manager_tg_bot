@@ -23,40 +23,35 @@ task_management_router = Router()
 @sync_to_async
 def get_user_tasks(user, state: str = '*'):
     if state == '*':
-        return list(Task.objects.filter(
-            (models.Q(assignee=user) & ~models.Q(status__in=['open', 'completed'])) |
-            (models.Q(is_group_task=True) & models.Q(status='in_progress'))
-        ))
+        return list(TaskAssignment.objects.filter(
+            user=user,
+            status__in=['in_progress', 'assigned', 'overdue']
+        ).select_related('task').order_by('-task__created_at'))
     elif state == 'my_tasks':
-        logging.info(f"Getting user tasks for user {user.id} with state {state}")
-        logging.info(f"length = {len(list(Task.objects.filter(
-            (models.Q(assignee=user) | models.Q(is_group_task=True)),
+        return list(TaskAssignment.objects.filter(
+            user=user,
             status__in=['in_progress', 'assigned', 'overdue']
-        ).order_by('-created_at')))}")
-        return list(Task.objects.filter(
-            (models.Q(assignee=user) | models.Q(is_group_task=True)),
-            status__in=['in_progress', 'assigned', 'overdue']
-        ).order_by('-created_at'))
+        ).select_related('task').order_by('-task__created_at'))
     elif state == 'user_completed_tasks':
-        return list(Task.objects.filter(
-            (models.Q(assignee=user) | models.Q(is_group_task=True)),
+        return list(TaskAssignment.objects.filter(
+            user=user,
             status='completed'
-        ).order_by('-completed_at'))
+        ).select_related('task').order_by('-completed_at'))
     elif state == 'user_overdue_tasks':
-        return list(Task.objects.filter(
-            (models.Q(assignee=user) | models.Q(is_group_task=True)),
+        return list(TaskAssignment.objects.filter(
+            user=user,
             status='overdue'
-        ).order_by('deadline'))
+        ).select_related('task').order_by('task__deadline'))
     elif state == 'user_submitted_tasks':
-        return list(Task.objects.filter(
-            (models.Q(assignee=user) | models.Q(is_group_task=True)),
+        return list(TaskAssignment.objects.filter(
+            user=user,
             status='submitted'
-        ).order_by('-created_at'))
+        ).select_related('task').order_by('-task__created_at'))
     elif state == 'user_revision_tasks':
-        return list(Task.objects.filter(
-            (models.Q(assignee=user) | models.Q(is_group_task=True)),
+        return list(TaskAssignment.objects.filter(
+            user=user,
             status='revision'
-        ).order_by('-created_at'))
+        ).select_related('task').order_by('-task__created_at'))
 
 
 @sync_to_async
@@ -212,17 +207,25 @@ async def handle_task_list_navigation(callback: CallbackQuery, state: FSMContext
                     ).order_by('deadline'))
             else:
                 if task_type == "my_tasks":
-                    assignments = TaskAssignment.objects.filter(user=user)
-                    tasks = [el.task for el in assignments]
-                    return tasks + list(Task.objects.filter(
-                        (Q(assignee=user) | Q(is_group_task=True)),
+                    # assignments = TaskAssignment.objects.filter(user=user)
+                    # tasks = [el.task for el in assignments]
+                    # return tasks + list(Task.objects.filter(
+                    #     (Q(assignee=user) | Q(is_group_task=True)),
+                    #     status__in=['in_progress', 'assigned', 'overdue']
+                    # ).order_by('-created_at'))
+                    
+                    return list(TaskAssignment.objects.filter(
+                        (Q(user=user)),
                         status__in=['in_progress', 'assigned', 'overdue']
-                    ).order_by('-created_at'))
+                    ))
+                    
                 elif task_type == "user_completed_tasks":
-                    return tasks + list(Task.objects.filter(
-                        (Q(assignee=user) | Q(is_group_task=True)),
+                    
+                    return list(TaskAssignment.objects.filter(
+                        (Q(user=user)),
                         status='completed'
-                    ).order_by('-completed_at'))
+                    ))
+                    
                 else:  # user_overdue_tasks
                     return list(Task.objects.filter(
                         (Q(assignee=user) | Q(is_group_task=True)),
@@ -240,7 +243,7 @@ async def handle_task_list_navigation(callback: CallbackQuery, state: FSMContext
             text = "⏰ All overdue tasks:" if user.is_admin else "⏰ My overdue tasks:"
         
         
-        keyboard = get_task_list_keyboard(tasks, state=callback.data)
+        keyboard = await get_task_list_keyboard(tasks, state=callback.data)
         await callback.message.edit_text(text, reply_markup=keyboard)
         await callback.answer()
         logger.info(f"Successfully displayed task list for user {user_id}")
@@ -305,7 +308,7 @@ async def view_task_details(callback: CallbackQuery, state: FSMContext):
     if asignee:
         task_text += asignee
 
-    keyboard = get_task_detail_keyboard(task.id, user.is_admin, task.status)
+    keyboard = await get_task_detail_keyboard(task.id, user.is_admin, task.status, user)
     await send_task_message(callback.message, task, task_text, keyboard)
     await callback.answer()
 
@@ -325,14 +328,14 @@ async def take_task(callback: CallbackQuery, state: FSMContext):
 
 @sync_to_async
 def mark_task_submitted(task_id, user, comment):
-    task = Task.objects.get(id=task_id)
-    task.mark_submitted()
+    assignment = TaskAssignment.objects.get(task_id=task_id, user=user)
+    assignment.mark_submitted()
     TaskComment.objects.create(
-        task=task,
+        task_id=task_id,
         user=user,
         text=comment
     )
-    return task
+    return assignment.task
 
 
 class TaskStates(StatesGroup):
@@ -395,13 +398,12 @@ async def handle_task_comment(message: Message, state: FSMContext):
             f"Assignee: {user.first_name}\n"
             f"Time sent: {timezone.now().astimezone(ZoneInfo('Europe/Moscow')).strftime('%m/%d/%Y %I:%M %p')}\n"
             f"💬 Commentary: {message.text}\n\n"
-            # f"Чтобы проверить и подтвердить выполнение, используйте команду /review_{task_id}"
         )
         
         try:
             # Send notification with review keyboard
             review_keyboard = InlineKeyboardBuilder()
-            review_keyboard.button(text="✅ Review task", callback_data=f"review_task:{task_id}")
+            review_keyboard.button(text="✅ Review task", callback_data=f"review_task:{task_id}:{user_id}")
             await message.bot.send_message(
                 creator.telegram_id,
                 notification_text,
@@ -716,7 +718,7 @@ async def cancel_submission(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     task_id = data.get('task_id')
 
-    if task_id:
+    if (task_id):
         await view_task_details(callback, state)
     else:
         await show_my_tasks(callback, state)
@@ -734,7 +736,7 @@ async def handle_back_to_task_list(callback: CallbackQuery, state: FSMContext):
         tasks = await get_user_tasks(user)
         text = "📋 My tasks:"
 
-    keyboard = get_task_list_keyboard(tasks)
+    keyboard = await get_task_list_keyboard(tasks)
     await safe_edit_message(callback.message, text, keyboard)
     await callback.answer()
 
@@ -772,7 +774,7 @@ async def handle_task_pagination(callback: CallbackQuery, state: FSMContext):
         tasks = await get_admin_task_list(state=state_)
         text = "📋 All tasks:"
 
-    keyboard = get_task_list_keyboard(tasks, page=page, state=state_)
+    keyboard = await get_task_list_keyboard(tasks, page=page, state=state_)
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
 
@@ -808,7 +810,7 @@ async def show_filtered_tasks(callback: CallbackQuery, state: FSMContext):
     tasks = await get_user_filtered_tasks(user_id)
     filtered_user = await sync_to_async(TelegramUser.objects.get)(telegram_id=user_id)
 
-    keyboard = get_task_list_keyboard(tasks, page=page)
+    keyboard = await get_task_list_keyboard(tasks, page=page)
     await callback.message.edit_text(
         f"📋 User's tasks {filtered_user.first_name}:",
         reply_markup=keyboard
@@ -820,7 +822,7 @@ async def show_filtered_tasks(callback: CallbackQuery, state: FSMContext):
 async def clear_task_filter(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     tasks = await get_admin_task_list()
-    keyboard = get_task_list_keyboard(tasks)
+    keyboard = await get_task_list_keyboard(tasks)
     await callback.message.edit_text("📋 All tasks:", reply_markup=keyboard)
     await callback.answer()
 
@@ -852,7 +854,7 @@ async def show_completed_tasks(callback: CallbackQuery, state: FSMContext):
         return
 
     tasks = await get_completed_tasks()
-    keyboard = get_task_list_keyboard(tasks)
+    keyboard = await get_task_list_keyboard(tasks)
     await callback.message.edit_text("✅ Completed tasks:", reply_markup=keyboard)
     await callback.answer()
 
@@ -866,7 +868,7 @@ async def show_overdue_tasks(callback: CallbackQuery, state: FSMContext):
         return
 
     tasks = await get_overdue_tasks()
-    keyboard = get_task_list_keyboard(tasks)
+    keyboard = await get_task_list_keyboard(tasks)
     await callback.message.edit_text("⏰ Overdue tasks:", reply_markup=keyboard)
     await callback.answer()
 
@@ -875,7 +877,7 @@ async def show_overdue_tasks(callback: CallbackQuery, state: FSMContext):
 async def show_user_completed_tasks(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
     tasks = await get_user_completed_tasks(user)
-    keyboard = get_task_list_keyboard(tasks)
+    keyboard = await get_task_list_keyboard(tasks)
     await callback.message.edit_text("✅ My completed tasks:", reply_markup=keyboard)
     await callback.answer()
 
@@ -884,7 +886,7 @@ async def show_user_completed_tasks(callback: CallbackQuery, state: FSMContext):
 async def show_user_overdue_tasks(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
     tasks = await get_user_overdue_tasks(user)
-    keyboard = get_task_list_keyboard(tasks)
+    keyboard = await get_task_list_keyboard(tasks)
     await callback.message.edit_text("⏰ My overdue tasks:", reply_markup=keyboard)
     await callback.answer()
 
@@ -893,7 +895,7 @@ async def show_user_overdue_tasks(callback: CallbackQuery, state: FSMContext):
 async def show_my_tasks(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
     tasks = await get_user_tasks(user)
-    keyboard = get_task_list_keyboard(tasks)
+    keyboard = await get_task_list_keyboard(tasks)
     await callback.message.edit_text("📋 My tasks:", reply_markup=keyboard)
     await callback.answer()
 
@@ -924,7 +926,7 @@ async def handle_delete_task(callback: CallbackQuery, state: FSMContext):
         
         # Return to task list
         tasks = await get_admin_task_list()
-        keyboard = get_task_list_keyboard(tasks)
+        keyboard = await get_task_list_keyboard(tasks)
         await callback.message.edit_text(
             f"✅ Task «{task_title}» deleted\n\n"
             "📋 All tasks:",
@@ -1046,7 +1048,7 @@ async def show_submitted_tasks(callback: CallbackQuery, state: FSMContext):
         tasks = await get_user_tasks(user, "user_submitted_tasks")
         text = "📤 My tasks on check:"
 
-    keyboard = get_task_list_keyboard(tasks, state="submitted_tasks")
+    keyboard = await get_task_list_keyboard(tasks, state="submitted_tasks")
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
 
@@ -1062,6 +1064,6 @@ async def show_revision_tasks(callback: CallbackQuery, state: FSMContext):
         tasks = await get_user_tasks(user, "user_revision_tasks")
         text = "🔄 My tasks on rework:"
 
-    keyboard = get_task_list_keyboard(tasks, state="revision_tasks")
+    keyboard = await get_task_list_keyboard(tasks, state="revision_tasks")
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()

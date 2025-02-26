@@ -27,20 +27,32 @@ def get_task_list_open_keyboard(tasks, page=1, items_per_page=5) -> InlineKeyboa
     builder.adjust(1)
     return builder.as_markup()
 
+from asgiref.sync import sync_to_async
+from robot.models import Task, TelegramUser, TaskAssignment
 
-def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=False, state: str = '*') -> InlineKeyboardMarkup:
+@sync_to_async
+def ajdbakjdbsdjkbasjkdbasjkd(task: TaskAssignment):
+    return task.task
+
+async def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=False, state: str = '*') -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    
     
     start_idx = (page - 1) * items_per_page
     end_idx = start_idx + items_per_page
     
     for task in tasks[start_idx:end_idx]:
+        
+        if isinstance(task, TaskAssignment):
+            task_ass = task
+            task = await ajdbakjdbsdjkbasjkdbasjkd(task_ass)
+        
         status_emoji = "✅" if task.status == 'completed' else "📝"
-        if task.status == 'overdue':
+        if task_ass.status == 'overdue':
             status_emoji = "⏰"
-        elif task.status == 'submitted':
+        elif task_ass.status == 'submitted':
             status_emoji = "📤"
-        elif task.status == 'revision':
+        elif task_ass.status == 'revision':
             status_emoji = "🔄"
             
         builder.button(
@@ -74,19 +86,26 @@ def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=False,
     builder.adjust(1)
     return builder.as_markup()
 
+from robot.models import TelegramUser, TaskAssignment, Task
 
-def get_task_detail_keyboard(task_id: int, user_is_admin: bool = False, task_status: str = 'open') -> InlineKeyboardMarkup:
+@sync_to_async
+def get_assignment_by_task(task_id: int, user: TelegramUser):
+    return TaskAssignment.objects.get(task_id=task_id, user=user)
+
+
+async def get_task_detail_keyboard(task_id: int, user_is_admin: bool = False, task_status: str = 'open', user: TelegramUser = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
+    task_ass = await get_assignment_by_task(task_id, user)
     logging.info(f"Review of the task -> {task_status}")
     
     if task_status == 'open' and not user_is_admin:
         builder.button(text="✅ Take Task", callback_data=f"take_task:{task_id}")
-    elif (task_status == 'in_progress' or task_status == 'assigned' or 
-          task_status == 'overdue' or task_status == 'revision') and not user_is_admin:
+    elif (task_ass.status == 'in_progress' or task_ass.status == 'assigned' or 
+          task_ass.status == 'overdue' or task_ass.status == 'revision') and not user_is_admin:
         builder.button(text="📤 Submit Task", callback_data=f"submit_task:{task_id}")
     
-    if task_status == 'submitted' and user_is_admin:
+    if task_ass.status == 'submitted' and user_is_admin:
         builder.button(text="✅ Accept", callback_data=f"accept_task:{task_id}")
         builder.button(text="🔄 Request Revision", callback_data=f"request_revision:{task_id}")
     
