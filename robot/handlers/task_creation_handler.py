@@ -40,12 +40,45 @@ async def process_title(message: Message, state: FSMContext):
     await message.answer("📄 Введите описание задачи:")
 
 
+from aiogram.types import InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+from datetime import timedelta
+
+def seven_days_kb():
+    now = datetime.now()
+    kb = InlineKeyboardBuilder()
+    for i in range(1, 7+1):
+        next_day = now + timedelta(days=i)
+        logging.info(f'next_day -> {next_day}')
+        kb.button(text=f'{next_day.day}.{next_day.month}.{next_day.year} 23:59',
+                  callback_data=f'choose_time_{next_day.day}.{next_day.month}.{next_day.year} 23:59')
+    kb.adjust(2)
+    return kb.as_markup()
+    
+
 @task_creation_router.message(TaskCreation.waiting_for_description)
 async def process_description(message: Message, state: FSMContext):
     await state.update_data(description=message.text)
     await state.set_state(TaskCreation.waiting_for_deadline)
-    await message.answer("📅 Введите дедлайн в формате ДД.ММ.ГГГГ ЧЧ:ММ\nНапример: 31.12.2024 15:00")
+    await message.answer(
+        "📅 Введите дедлайн в формате ДД.ММ.ГГГГ ЧЧ:ММ\nНапример: 31.12.2024 15:00\n\nИли выберите из списка внизу.",
+        reply_markup=seven_days_kb(),
+        )
 
+@task_creation_router.callback_query(F.data.startswith('choose_time_'))
+async def process_deadline_time(callback: CallbackQuery, state: FSMContext):
+    try:
+        
+        deadline = datetime.strptime(callback.data.split('_')[-1], "%d.%m.%Y %H:%M")
+        await state.update_data(deadline=deadline)
+        
+        await state.set_state(TaskCreation.waiting_for_assignment_type)
+        keyboard = get_assignment_type_keyboard()
+        await callback.message.edit_text("👥 Выберите тип назначения:", reply_markup=keyboard)
+        
+    except Exception as e:
+        await callback.answer(f'Error: {e}')
 
 @task_creation_router.message(TaskCreation.waiting_for_deadline)
 async def process_deadline(message: Message, state: FSMContext):
@@ -218,17 +251,30 @@ def create_new_task(data, creator):
         asignee = TelegramUser.objects.get(telegram_id=data['assignee_id'])
     except Exception as e:
         asignee = None
-
-    task = Task.objects.create(
-        title=data['title'],
-        description=data['description'],
-        creator=creator,
-        deadline=data['deadline'],
-        is_group_task=data['is_group_task'],
-        assignee=asignee,
-        media_file_id=data.get('media_file_id', None),
-        media_type=data.get('media_type', None),
-    )
+    
+    if data.get('is_open_task'):
+        task = Task.objects.create(
+            title=data['title'],
+            description=data['description'],
+            creator=creator,
+            deadline=data['deadline'],
+            is_group_task=data['is_group_task'],
+            assignee=asignee,
+            media_file_id=data.get('media_file_id', None),
+            media_type=data.get('media_type', None),
+        )
+    else:
+        task = Task.objects.create(
+            title=data['title'],
+            description=data['description'],
+            creator=creator,
+            deadline=data['deadline'],
+            is_group_task=data['is_group_task'],
+            assignee=asignee,
+            media_file_id=data.get('media_file_id', None),
+            media_type=data.get('media_type', None),
+            status='assigned'
+        )
     return task
 
 

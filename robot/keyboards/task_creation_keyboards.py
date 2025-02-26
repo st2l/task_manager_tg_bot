@@ -7,7 +7,8 @@ from asgiref.sync import sync_to_async
 def get_assignment_type_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="👤 Индивидуальная задача", callback_data="individual_task")
-    builder.button(text="👥 Групповая задача", callback_data="group_task")
+    builder.button(text="👥 Групповая задача (всем в группе)", callback_data="group_task")
+    builder.button(text="👥 Групповая задача (выбрать определенных исполнителей)", callback_data="multi_task")
     builder.button(text="❌ Отмена", callback_data="cancel_creation")
     builder.adjust(1)
     return builder.as_markup()
