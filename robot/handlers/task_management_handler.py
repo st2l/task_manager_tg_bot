@@ -313,12 +313,12 @@ async def submit_task(callback: CallbackQuery, state: FSMContext):
         task_id = int(callback.data.split(":")[1])
         await state.update_data(task_id=task_id)
         
-        # Ask for comment
+        # Ask for mandatory comment
         keyboard = InlineKeyboardBuilder()
-        keyboard.button(text="⏩ Пропустить", callback_data="skip_comment")
+        keyboard.button(text="❌ Отмена", callback_data="cancel_submission")
         await callback.message.edit_text(
-            "💬 Пожалуйста, напишите комментарий к выполненному заданию\n"
-            "или нажмите «Пропустить», если комментарий не требуется.",
+            "💬 Пожалуйста, напишите комментарий к выполненному заданию.\n"
+            "Комментарий обязателен для завершения задачи.",
             reply_markup=keyboard.as_markup()
         )
         await state.set_state(TaskStates.waiting_for_comment)
@@ -387,61 +387,6 @@ async def handle_task_comment(message: Message, state: FSMContext):
     except Exception as e:
         logger.error(f"Error in handle_task_comment for user {user_id}: {str(e)}", exc_info=True)
         await message.answer("❌ Произошла ошибка при сохранении комментария")
-        await state.clear()
-
-
-@task_management_router.callback_query(F.data == "skip_comment")
-async def skip_task_comment(callback: CallbackQuery, state: FSMContext):
-    user_id = callback.from_user.id
-    logger.info(f"User {user_id} skipped comment")
-    
-    try:
-        data = await state.get_data()
-        task_id = data['task_id']
-        user, _ = await identify_user(user_id)
-        
-        @sync_to_async
-        def complete_task():
-            task = Task.objects.get(id=task_id)
-            task.mark_completed()
-            return task
-            
-        @sync_to_async
-        def get_admins():
-            return list(TelegramUser.objects.filter(is_admin=True, notification_enabled=True))
-        
-        task = await complete_task()
-        admins = await get_admins()
-        
-        # Send notifications to admins
-        notification_text = (
-            f"✅ Задача выполнена!\n"
-            f"Название: {task.title}\n"
-            f"Исполнитель: {user.first_name}\n"
-            f"Время выполнения: {task.completed_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M')}"
-        )
-        
-        for admin in admins:
-            try:
-                await callback.bot.send_message(admin.telegram_id, notification_text)
-                logger.info(f"Sent completion notification to admin {admin.telegram_id}")
-            except Exception as e:
-                logger.error(f"Failed to send notification to admin {admin.telegram_id}: {e}")
-        
-        # Update task view
-        task_text = await get_text_with_details(task)
-        keyboard = get_task_detail_keyboard(task_id, user.is_admin, 'completed')
-        await callback.message.edit_text(
-            f"✅ Задача отмечена как выполненная!\n{task_text}",
-            reply_markup=keyboard
-        )
-        await state.clear()
-        await callback.answer()
-        logger.info(f"Task {task_id} marked as completed without comment by user {user_id}")
-        
-    except Exception as e:
-        logger.error(f"Error in skip_task_comment for user {user_id}: {str(e)}", exc_info=True)
-        await callback.answer("❌ Произошла ошибка при выполнении задачи")
         await state.clear()
 
 
