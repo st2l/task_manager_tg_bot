@@ -28,7 +28,7 @@ def get_user_keyboard() -> InlineKeyboardMarkup:
 
 @start_router.message(Command("start"))
 async def handle_start(message: Message):
-    user, is_new = await identify_user(message.from_user.id, message.from_user.username)
+    user, is_new = await identify_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     
     if user.is_admin:
         keyboard = get_admin_keyboard()  # Теперь включает кнопку "Пользователи"

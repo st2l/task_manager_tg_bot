@@ -133,30 +133,35 @@ def create_task_completion(task_id, user, comment=None):
     )
     return task
 
-
+from robot.models import TaskAssignment
 @sync_to_async
 def get_user_filtered_tasks(user_id, state: str = '*'):
     logging.info(f"Getting user filtered tasks for user {user_id} with state {state}")
     filtered_user = TelegramUser.objects.get(telegram_id=user_id)
     if state == '*':
-        return list(Task.objects.filter(
-            models.Q(assignee=filtered_user)
+        assignments = TaskAssignment.objects.filter(user=filtered_user)
+        tasks = [el.task for el in assignments]
+        return tasks + list(Task.objects.filter(
+            models.Q(assignee=filtered_user) | models.Q(assignments__user=filtered_user)
         ).order_by('-created_at'))
     elif state == 'my_tasks':
-        return list(Task.objects.filter(
-            models.Q(assignee=filtered_user),
-            status__in=['in_progress', 'assigned', 'overdue']
+        assignments = TaskAssignment.objects.filter(user=filtered_user)
+        tasks = [el.task for el in assignments]
+        return tasks + list(Task.objects.filter(
+            (models.Q(assignee=filtered_user) | models.Q(assignments__user=filtered_user)),
+            status__in=['in_progress', 'assigned', 'overdue', 'multi']
         ).order_by('-created_at'))
     elif state == 'user_completed_tasks':
         return list(Task.objects.filter(
-            models.Q(assignee=filtered_user),
+            models.Q(assignee=filtered_user) | models.Q(assignments__user=filtered_user),
             status='completed'
         ).order_by('-completed_at'))
     elif state == 'user_overdue_tasks':
         return list(Task.objects.filter(
-            models.Q(assignee=filtered_user),
+            models.Q(assignee=filtered_user) | models.Q(assignments__user=filtered_user),
             status='overdue'
         ).order_by('deadline'))
+
 
 @sync_to_async
 def get_user_completed_tasks(user):
@@ -207,12 +212,14 @@ async def handle_task_list_navigation(callback: CallbackQuery, state: FSMContext
                     ).order_by('deadline'))
             else:
                 if task_type == "my_tasks":
-                    return list(Task.objects.filter(
+                    assignments = TaskAssignment.objects.filter(user=user)
+                    tasks = [el.task for el in assignments]
+                    return tasks + list(Task.objects.filter(
                         (Q(assignee=user) | Q(is_group_task=True)),
                         status__in=['in_progress', 'assigned', 'overdue']
                     ).order_by('-created_at'))
                 elif task_type == "user_completed_tasks":
-                    return list(Task.objects.filter(
+                    return tasks + list(Task.objects.filter(
                         (Q(assignee=user) | Q(is_group_task=True)),
                         status='completed'
                     ).order_by('-completed_at'))
