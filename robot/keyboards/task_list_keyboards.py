@@ -36,6 +36,11 @@ def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=False,
         status_emoji = "✅" if task.status == 'completed' else "📝"
         if task.status == 'overdue':
             status_emoji = "⏰"
+        elif task.status == 'submitted':
+            status_emoji = "📤"
+        elif task.status == 'revision':
+            status_emoji = "🔄"
+            
         builder.button(
             text=f"{status_emoji} {task.title}",
             callback_data=f"view_task:{task.id}"
@@ -58,6 +63,8 @@ def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=False,
         builder.button(text="◀️ Назад", callback_data="back_to_main")
     else:
         builder.button(text="📋 Текущие задачи", callback_data="my_tasks")
+        builder.button(text="📤 На проверке", callback_data="submitted_tasks")
+        builder.button(text="🔄 На доработке", callback_data="revision_tasks")
         builder.button(text="✅ Выполненные", callback_data="user_completed_tasks")
         builder.button(text="⏰ Просроченные", callback_data="user_overdue_tasks")
         builder.button(text="◀️ Назад", callback_data="back_to_main")
@@ -65,13 +72,21 @@ def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=False,
     builder.adjust(1)
     return builder.as_markup()
 
+import logging
 def get_task_detail_keyboard(task_id: int, user_is_admin: bool = False, task_status: str = 'open') -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
+    logging.info(f"Review of the task -> {task_status}")
+    
     if task_status == 'open' and not user_is_admin:
         builder.button(text="✅ Взять в работу", callback_data=f"take_task:{task_id}")
-    elif (task_status == 'in_progress' or task_status == 'assigned' or task_status == 'overdue') and not user_is_admin:
+    elif (task_status == 'in_progress' or task_status == 'assigned' or 
+          task_status == 'overdue' or task_status == 'revision') and not user_is_admin:
         builder.button(text="📤 Сдать задание", callback_data=f"submit_task:{task_id}")
+    
+    if task_status == 'submitted' and user_is_admin:
+        builder.button(text="✅ Принять", callback_data=f"accept_task:{task_id}")
+        builder.button(text="🔄 Отправить на доработку", callback_data=f"request_revision:{task_id}")
     
     if user_is_admin:
         builder.button(text="❌ Удалить", callback_data=f"delete_task:{task_id}")
@@ -118,4 +133,4 @@ def get_user_filter_keyboard(users, page=1, items_per_page=5) -> InlineKeyboardM
     builder.button(text="❌ Сбросить фильтр", callback_data="clear_filter")
     builder.button(text="◀️ Назад", callback_data="tasks")
     builder.adjust(1)
-    return builder.as_markup() 
+    return builder.as_markup()

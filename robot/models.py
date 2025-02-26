@@ -49,8 +49,10 @@ class Task(models.Model):
         ('open', 'Open'),  # Открытая задача, доступная для взятия
         ('assigned', 'Assigned'),  # Назначена конкретному исполнителю
         ('in_progress', 'In Progress'),
+        ('submitted', 'Submitted'),  # Сдана на проверку
         ('completed', 'Completed'),
         ('overdue', 'Overdue'),
+        ('revision', 'Revision'),  # Отправлена на доработку
     ]
 
     title = models.CharField(max_length=255)
@@ -73,9 +75,19 @@ class Task(models.Model):
     def __str__(self):
         return self.title
     
+    def mark_submitted(self):
+        self.status = 'submitted'
+        self.save()
+        
     def mark_completed(self):
         self.status = 'completed'
         self.completed_at = timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
+        self.save()
+        
+    def mark_revision(self, new_deadline=None):
+        self.status = 'revision'
+        if new_deadline:
+            self.deadline = new_deadline
         self.save()
 
     @property

@@ -18,3 +18,12 @@ class TaskComment(StatesGroup):
 
 class TaskSubmission(StatesGroup):
     waiting_for_comment = State()
+
+
+class TaskFilters(StatesGroup):
+    all_tasks = State()
+    my_tasks = State()
+    submitted_tasks = State()
+    revision_tasks = State()
+    completed_tasks = State()
+    overdue_tasks = State()
