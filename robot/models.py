@@ -89,11 +89,18 @@ class TaskAssignment(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='assignments')
     user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE)
     assigned_at = models.DateTimeField(auto_now_add=True)
+    accepted = models.BooleanField(default=False)
+    accepted_at = models.DateTimeField(null=True, blank=True)
     completed = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
         unique_together = ['task', 'user']
+    
+    def mark_accepted(self):
+        self.accepted = True
+        self.accepted_at = timezone.now().astimezone(ZoneInfo("Europe/Moscow"))
+        self.save()
     
     def mark_completed(self):
         self.completed = True

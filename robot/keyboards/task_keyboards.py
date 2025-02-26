@@ -51,8 +51,12 @@ async def get_group_task_keyboard(bot: Bot) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_personal_task_keyboard() -> InlineKeyboardMarkup:
+def get_personal_task_keyboard(task_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    builder.button(
+        text="✅ Принять задание",
+        callback_data=f"accept_task:{task_id}"
+    )
     builder.button(
         text="📋 Перейти ко всем заданиям",
         callback_data="my_tasks"

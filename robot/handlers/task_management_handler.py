@@ -670,3 +670,95 @@ async def handle_delete_task(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.error(f"Error in handle_delete_task for user {user_id}: {str(e)}", exc_info=True)
         await callback.answer("❌ Произошла ошибка при удалении задачи")
+
+from robot.models import TaskAssignment
+@sync_to_async
+def mark_task_accepted(task_id, user):
+    task = Task.objects.get(id=task_id)
+    
+    # For regular individual task
+    if task.assignee == user and not task.is_group_task and not task.is_multi_task:
+        # Create a TaskAssignment record if it doesn't exist
+        assignment, created = TaskAssignment.objects.get_or_create(
+            task=task,
+            user=user,
+            defaults={'accepted': True, 'accepted_at': timezone.now().astimezone(ZoneInfo("Europe/Moscow"))}
+        )
+        if not created and not assignment.accepted:
+            assignment.mark_accepted()
+        return task, True
+    
+    # For multi-task
+    if task.is_multi_task:
+        try:
+            assignment = TaskAssignment.objects.get(task=task, user=user)
+            if not assignment.accepted:
+                assignment.mark_accepted()
+                return task, True
+            return task, False  # Already accepted
+        except TaskAssignment.DoesNotExist:
+            return task, False  # Not assigned to this user
+    
+    # For group task, create assignment if needed
+    if task.is_group_task:
+        assignment, created = TaskAssignment.objects.get_or_create(
+            task=task,
+            user=user,
+            defaults={'accepted': True, 'accepted_at': timezone.now().astimezone(ZoneInfo("Europe/Moscow"))}
+        )
+        if not created and not assignment.accepted:
+            assignment.mark_accepted()
+        return task, True
+    
+    return None, False
+
+
+@task_management_router.callback_query(F.data.startswith("accept_task:"))
+async def accept_task(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info(f"User {user_id} accepting task")
+    
+    try:
+        task_id = int(callback.data.split(":")[1])
+        user, _ = await identify_user(user_id)
+        
+        task, accepted = await mark_task_accepted(task_id, user)
+        
+        if accepted and task:
+            # Send notification to admin (task creator)
+            @sync_to_async
+            def get_creator(task: Task):
+                return task.creator.telegram_id
+            
+            creator_id = await get_creator(task)
+            admin_notification = (
+                f"✅ Пользователь принял задание!\n\n"
+                f"Задание: {task.title}\n"
+                f"Исполнитель: {user.first_name}\n"
+                f"Время принятия: {timezone.now().astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M')}"
+            )
+            
+            try:
+                await callback.bot.send_message(creator_id, admin_notification)
+                logger.info(f"Sent acceptance notification to admin {creator_id}")
+            except Exception as e:
+                logger.error(f"Failed to send notification to admin {creator_id}: {e}")
+            
+            # Update UI for the user
+            await callback.message.edit_text(
+                f"✅ Вы приняли задание!\n\n"
+                f"Задание: {task.title}\n"
+                f"Срок выполнения: {task.deadline.strftime('%d.%m.%Y %H:%M')}"
+            )
+            await callback.answer("✅ Задание успешно принято!")
+            logger.info(f"User {user_id} accepted task {task_id}")
+        elif task:
+            await callback.answer("Это задание уже принято вами ранее.")
+            logger.info(f"User {user_id} attempted to accept already accepted task {task_id}")
+        else:
+            await callback.answer("❌ Произошла ошибка при принятии задания")
+            logger.warning(f"Failed to accept task {task_id} for user {user_id}")
+    
+    except Exception as e:
+        logger.error(f"Error in accept_task for user {user_id}: {str(e)}", exc_info=True)
+        await callback.answer("❌ Произошла ошибка при принятии задания")

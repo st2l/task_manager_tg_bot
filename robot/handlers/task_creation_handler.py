@@ -91,7 +91,7 @@ async def process_deadline(message: Message, state: FSMContext):
         keyboard = get_assignment_type_keyboard()
         await message.answer("👥 Выберите тип назначения:", reply_markup=keyboard)
     except ValueError:
-        await message.answer("❌ Неверный формат даты. Попробуйте еще раз в формате ДД.М.ГГГГ ЧЧ:ММ")
+        await message.answer("❌ Неверный формат даты. Попробуйте еще раз в формате ДД.М.ГГГ ЧЧ:ММ")
 
 
 @task_creation_router.callback_query(F.data == "individual_task")
@@ -306,14 +306,14 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
             await bot.send_message(group_id, group_text)
         
         # Send to individual assignees
-        keyboard = get_personal_task_keyboard()
         personal_text = (
             f"👤 Вам назначена новая задача!\n\n{task_text}\n\n"
-            "Пожалуйста, ознакомьтесь и приступите к выполнению."
+            "Пожалуйста, ознакомьтесь и примите задание к выполнению."
         )
         
         for assignment in assignments:
             user_id = assignment.user.telegram_id
+            keyboard = get_personal_task_keyboard(task.id)
             if task.media_file_id:
                 if task.media_type == 'photo':
                     await bot.send_photo(user_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
@@ -352,9 +352,9 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
     elif task.assignee:
         personal_text = (
             f"👤 Вам назначена новая задача!\n\n{task_text}\n\n"
-            "Пожалуйста, ознакомьтесь и приступите к выполнению."
+            "Пожалуйста, ознакомьтесь и примите задание к выполнению."
         )
-        keyboard = get_personal_task_keyboard()
+        keyboard = get_personal_task_keyboard(task.id)
         if task.media_file_id:
             if task.media_type == 'photo':
                 message = await bot.send_photo(task.assignee.telegram_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
@@ -362,14 +362,6 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
                 message = await bot.send_video(task.assignee.telegram_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
         else:
             message = await bot.send_message(task.assignee.telegram_id, personal_text, reply_markup=keyboard)
-    
-    # Отправляем медиафайл, если есть
-    # if task.media_file_id:
-    #     chat_id = group_id if (task.is_group_task or data.get('is_open_task')) else task.assignee.telegram_id
-    #     if data.get('media_type') == 'photo':
-    #         await bot.send_photo(chat_id, task.media_file_id)
-    #     else:
-    #         await bot.send_video(chat_id, task.media_file_id)
 
 
 @sync_to_async
