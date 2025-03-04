@@ -208,19 +208,22 @@ async def process_open_task(callback: CallbackQuery, state: FSMContext):
 
 @task_creation_router.message(TaskCreation.waiting_for_media)
 async def process_media(message: Message, state: FSMContext):
-    if message.photo:
+    if (message.photo):
         file_id = message.photo[-1].file_id
         media_type = 'photo'
-    elif message.video:
+    elif (message.video):
         file_id = message.video.file_id
         media_type = 'video'
+    elif (message.document):  # Add document handling
+        file_id = message.document.file_id
+        media_type = 'document'
     else:
-        await message.answer("❌ Please... Send photo/video or skip this step:")
+        await message.answer("❌ Please send photo/video/document or skip this step:")
         return
     
     await state.update_data(media_file_id=file_id, media_type=media_type)
     
-    # Показываем превью задачи
+    # Show task preview
     data = await state.get_data()
     preview_text = await get_task_preview(data)
     
@@ -300,8 +303,10 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
         if task.media_file_id:
             if task.media_type == 'photo':
                 await bot.send_photo(group_id, task.media_file_id, caption=group_text)
-            else:
+            elif task.media_type == 'video':
                 await bot.send_video(group_id, task.media_file_id, caption=group_text)
+            elif task.media_type == 'document':  # Add document sending
+                await bot.send_document(group_id, task.media_file_id, caption=group_text)
         else:
             await bot.send_message(group_id, group_text)
         
@@ -317,8 +322,10 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
             if task.media_file_id:
                 if task.media_type == 'photo':
                     await bot.send_photo(user_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
-                else:
+                elif task.media_type == 'video':
                     await bot.send_video(user_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
+                elif task.media_type == 'document':  # Add document sending
+                    await bot.send_document(user_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
             else:
                 await bot.send_message(user_id, personal_text, reply_markup=keyboard)
     
@@ -330,8 +337,10 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
         if task.media_file_id:
             if task.media_type == 'photo':
                 message = await bot.send_photo(group_id, task.media_file_id, caption=group_text, reply_markup=keyboard)
-            else:
+            elif task.media_type == 'video':
                 message = await bot.send_video(group_id, task.media_file_id, caption=group_text, reply_markup=keyboard)
+            elif task.media_type == 'document':  # Add document sending
+                await bot.send_document(group_id, task.media_file_id, caption=group_text)
         else:
             message = await bot.send_message(group_id, group_text, reply_markup=keyboard)
     
@@ -343,8 +352,10 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
         if task.media_file_id:
             if task.media_type == 'photo':
                 message = await bot.send_photo(group_id, task.media_file_id, caption=group_text, reply_markup=keyboard)
-            else:
+            elif task.media_type == 'video':
                 message = await bot.send_video(group_id, task.media_file_id, caption=group_text, reply_markup=keyboard)
+            elif task.media_type == 'document':  # Add document sending
+                await bot.send_document(group_id, task.media_file_id, caption=group_text)
         else:
             message = await bot.send_message(group_id, group_text, reply_markup=keyboard)
     
@@ -358,8 +369,10 @@ async def send_task_notification(bot: Bot, task: Task, data: dict):
         if task.media_file_id:
             if task.media_type == 'photo':
                 message = await bot.send_photo(task.assignee.telegram_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
-            else:
+            elif task.media_type == 'video':
                 message = await bot.send_video(task.assignee.telegram_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
+            elif task.media_type == 'document':  # Add document sending
+                await bot.send_document(task.assignee.telegram_id, task.media_file_id, caption=personal_text, reply_markup=keyboard)
         else:
             message = await bot.send_message(task.assignee.telegram_id, personal_text, reply_markup=keyboard)
 
@@ -437,7 +450,7 @@ def get_task_preview(data):
         if data.get('is_open_task'):
             preview_text += "\n🔓 Open for working"
         elif data.get('assignee_id'):
-            assignee = TelegramUser.objects.get(telegram_id=data['assignee_id'])
+            assignee = TelegramUser.objects.get(telegram_id(data['assignee_id']))
             preview_text += f"\n👤 Assignee: {assignee.first_name}"
     
     if data.get('media_file_id'):

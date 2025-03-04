@@ -69,7 +69,8 @@ class Task(models.Model):
     media_file_id = models.CharField(max_length=255, blank=True, null=True)
     media_type = models.CharField(max_length=10, choices=[
         ('photo', 'Photo'),
-        ('video', 'Video')
+        ('video', 'Video'),
+        ('document', 'Document')  # Add document type
     ], null=True, blank=True)
     
     def __str__(self):

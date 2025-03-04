@@ -8,16 +8,16 @@ async def safe_edit_message(message: Message, text: str, reply_markup=None):
         await message.answer(text, reply_markup=reply_markup)
 
 async def send_task_message(message: Message, task, text: str, reply_markup=None):
-    # Сначала отправляем медиафайл, если есть
     if task.media_file_id:
         try:
             if task.media_type == 'photo':
                 await message.answer_photo(task.media_file_id, caption=text, reply_markup=reply_markup)
-            else:
+            elif task.media_type == 'video':
                 await message.answer_video(task.media_file_id, caption=text, reply_markup=reply_markup)
+            elif task.media_type == 'document':  # Add document sending
+                await message.answer_document(task.media_file_id, caption=text, reply_markup=reply_markup)
             return
         except Exception as e:
-            print(f"Error sending media: {e}")
+            logger.error(f"Error sending media: {e}")
     
-    # Затем отправляем текст задания
-    await safe_edit_message(message, text, reply_markup) 
+    await safe_edit_message(message, text, reply_markup)

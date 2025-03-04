@@ -244,7 +244,10 @@ async def handle_task_list_navigation(callback: CallbackQuery, state: FSMContext
         
         
         keyboard = await get_task_list_keyboard(tasks, state=callback.data)
-        await callback.message.edit_text(text, reply_markup=keyboard)
+        try:
+            await callback.message.edit_text(text, reply_markup=keyboard)
+        except Exception as e:
+            await callback.message.answer(text, reply_markup=keyboard)
         await callback.answer()
         logger.info(f"Successfully displayed task list for user {user_id}")
         
@@ -896,7 +899,10 @@ async def show_my_tasks(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
     tasks = await get_user_tasks(user)
     keyboard = await get_task_list_keyboard(tasks)
-    await callback.message.edit_text("📋 My tasks:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("📋 My tasks:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("📋 My tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -1012,11 +1018,20 @@ async def accept_task(callback: CallbackQuery, state: FSMContext):
                 logger.error(f"Failed to send notification to admin {creator_id}: {e}")
             
             # Update UI for the user
-            await callback.message.edit_text(
-                f"✅ You confirmed task!\n\n"
-                f"Task: {task.title}\n"
-                f"Deadline: {task.deadline.strftime('%m/%d/%Y %I:%M %p')}"
-            )
+            try:
+                await callback.message.edit_text(
+                    f"✅ You confirmed task!\n\n"
+                    f"Task: {task.title}\n"
+                    f"Deadline: {task.deadline.strftime('%m/%d/%Y %I:%M %p')}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to update UI for user {user_id}: {e}")
+                await callback.message.answer(
+                    f"✅ You confirmed task!\n\n"
+                    f"Task: {task.title}\n"
+                    f"Deadline: {task.deadline.strftime('%m/%d/%Y %I:%M %p')}"
+                )
+                
             await callback.answer("✅ Task successfully became in progress!")
             logger.info(f"User {user_id} accepted task {task_id}")
         elif task:

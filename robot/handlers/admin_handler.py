@@ -27,7 +27,11 @@ async def handle_admin_tasks(callback: CallbackQuery):
         return
 
     keyboard = get_admin_task_list_keyboard()
-    await callback.message.edit_text("🗂 Task management:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("🗂 Task management:", reply_markup=keyboard)
+    except Exception as e:
+        logging.error(f"Error in handle_admin_tasks: {e}")
+        await callback.message.answer("🗂 Task management:", reply_markup=keyboard)
     await callback.answer()
 
 @admin_router.callback_query(F.data == "statistics")
