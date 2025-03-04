@@ -208,13 +208,13 @@ async def process_open_task(callback: CallbackQuery, state: FSMContext):
 
 @task_creation_router.message(TaskCreation.waiting_for_media)
 async def process_media(message: Message, state: FSMContext):
-    if (message.photo):
+    if message.photo:
         file_id = message.photo[-1].file_id
         media_type = 'photo'
-    elif (message.video):
+    elif message.video:
         file_id = message.video.file_id
         media_type = 'video'
-    elif (message.document):  # Add document handling
+    elif message.document:  # Add document handling
         file_id = message.document.file_id
         media_type = 'document'
     else:
@@ -450,7 +450,7 @@ def get_task_preview(data):
         if data.get('is_open_task'):
             preview_text += "\n🔓 Open for working"
         elif data.get('assignee_id'):
-            assignee = TelegramUser.objects.get(telegram_id(data['assignee_id']))
+            assignee = TelegramUser.objects.get(telegram_id=data['assignee_id'])
             preview_text += f"\n👤 Assignee: {assignee.first_name}"
     
     if data.get('media_file_id'):
