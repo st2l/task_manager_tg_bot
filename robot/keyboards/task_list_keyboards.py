@@ -97,11 +97,22 @@ def get_assignment_by_task(task_id: int, user: TelegramUser):
     except TaskAssignment.DoesNotExist:
         return False
 
+@sync_to_async
+def get_assignment_for_admin(task_id:int):
+    try:
+        return TaskAssignment.objects.get(task_id=task_id)
+    except TaskAssignment.DoesNotExist:
+        return False
+    
 
 async def get_task_detail_keyboard(task_id: int, user_is_admin: bool = False, task_status: str = 'open', user: TelegramUser = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
-    task_ass = await get_assignment_by_task(task_id, user)
+    if user_is_admin:
+        task_ass = await get_assignment_by_task(task_id, user)
+    else:
+        task_ass = await get_assignment_for_admin(task_id)
+        
     if task_ass == False:
         return False
     logging.info(f"Review of the task -> {task_status}")
