@@ -312,6 +312,9 @@ async def view_task_details(callback: CallbackQuery, state: FSMContext):
         task_text += asignee
 
     keyboard = await get_task_detail_keyboard(task.id, user.is_admin, task.status, user)
+    if keyboard == False:
+        await callback.answer("❌ Пользователь еще не подтвердил свое участие в заказе.")
+        return
     await send_task_message(callback.message, task, task_text, keyboard)
     await callback.answer()
 

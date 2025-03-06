@@ -92,13 +92,18 @@ from robot.models import TelegramUser, TaskAssignment, Task
 
 @sync_to_async
 def get_assignment_by_task(task_id: int, user: TelegramUser):
-    return TaskAssignment.objects.get(task_id=task_id, user=user)
+    try:
+        return TaskAssignment.objects.get(task_id=task_id, user=user)
+    except TaskAssignment.DoesNotExist:
+        return False
 
 
 async def get_task_detail_keyboard(task_id: int, user_is_admin: bool = False, task_status: str = 'open', user: TelegramUser = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
     task_ass = await get_assignment_by_task(task_id, user)
+    if task_ass == False:
+        return False
     logging.info(f"Review of the task -> {task_status}")
     
     if task_status == 'open' and not user_is_admin:
