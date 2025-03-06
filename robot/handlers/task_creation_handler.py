@@ -30,7 +30,10 @@ async def start_task_creation(callback: CallbackQuery, state: FSMContext):
         return
 
     await state.set_state(TaskCreation.waiting_for_title)
-    await callback.message.edit_text("📝 Enter task name:")
+    try:
+        await callback.message.edit_text("📝 Enter task name:")
+    except Exception as e:
+        await callback.message.answer("📝 Enter task name:")
     await callback.answer()
 
 
@@ -76,8 +79,10 @@ async def process_deadline_time(callback: CallbackQuery, state: FSMContext):
         
         await state.set_state(TaskCreation.waiting_for_assignment_type)
         keyboard = get_assignment_type_keyboard()
-        await callback.message.edit_text("👥 Choose type of task:", reply_markup=keyboard)
-        
+        try:
+            await callback.message.edit_text("👥 Choose type of task:", reply_markup=keyboard)
+        except Exception as e:
+            await callback.message.answer("👥 Choose type of task:", reply_markup=keyboard)    
     except Exception as e:
         await callback.answer(f'Error: {e}')
 
@@ -99,7 +104,10 @@ async def process_individual_task(callback: CallbackQuery, state: FSMContext):
     await state.update_data(is_group_task=False)
     keyboard = await get_users_keyboard()
     await state.set_state(TaskCreation.waiting_for_assignee)
-    await callback.message.edit_text("👤 Choose assignee:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("👤 Choose assignee:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("👤 Choose assignee:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -108,7 +116,10 @@ async def process_group_task(callback: CallbackQuery, state: FSMContext):
     await state.update_data(is_group_task=True)
     keyboard = get_media_keyboard()
     await state.set_state(TaskCreation.waiting_for_media)
-    await callback.message.edit_text("📎 Send a photo/video or skip the step:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("📎 Send a photo/video or skip the step:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("📎 Send a photo/video or skip the step:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -122,7 +133,10 @@ async def process_multi_task(callback: CallbackQuery, state: FSMContext):
     # Get and set the multi-user selection keyboard
     keyboard = await get_multi_users_keyboard()
     await state.set_state(TaskCreation.selecting_assignees)
-    await callback.message.edit_text("👥 Choose assignees for task:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("👥 Choose assignees for task:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("👥 Choose assignees for task:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -146,7 +160,10 @@ async def handle_user_selection(callback: CallbackQuery, state: FSMContext):
     
     # Update the keyboard with new selection state
     keyboard = await get_multi_users_keyboard(selected_users, current_page)
-    await callback.message.edit_text("👥 Choose assignees for task:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("👥 Choose assignees for task:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("👥 Choose assignees for task:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -163,7 +180,10 @@ async def handle_pagination(callback: CallbackQuery, state: FSMContext):
     
     # Update the keyboard with new page
     keyboard = await get_multi_users_keyboard(selected_users, new_page)
-    await callback.message.edit_text("👥 Choose assignees for task:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("👥 Choose assignees for task:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("👥 Choose assignees for task:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -178,7 +198,10 @@ async def confirm_multi_selection(callback: CallbackQuery, state: FSMContext):
     
     keyboard = get_media_keyboard()
     await state.set_state(TaskCreation.waiting_for_media)
-    await callback.message.edit_text("📎 Send photo/video or skip this step:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("📎 Send photo/video or skip this step:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("📎 Send photo/video or skip this step:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -193,7 +216,10 @@ async def process_assignee(callback: CallbackQuery, state: FSMContext):
     await state.update_data(assignee_id=user_id, is_open_task=False)
     keyboard = get_media_keyboard()
     await state.set_state(TaskCreation.waiting_for_media)
-    await callback.message.edit_text("📎 Send photo/video or skip this step", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("📎 Send photo/video or skip this step", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("📎 Send photo/video or skip this step", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -202,7 +228,10 @@ async def process_open_task(callback: CallbackQuery, state: FSMContext):
     await state.update_data(assignee_id=None, is_open_task=True)
     keyboard = get_media_keyboard()
     await state.set_state(TaskCreation.waiting_for_media)
-    await callback.message.edit_text("📎 Send photo/video or skip this step:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("📎 Send photo/video or skip this step:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("📎 Send photo/video or skip this step:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -490,5 +519,8 @@ async def create_task(callback: CallbackQuery, state: FSMContext):
 @task_creation_router.callback_query(F.data == "cancel_creation")
 async def cancel_creation(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Creation of task canceled")
+    try:
+        await callback.message.edit_text("❌ Creation of task canceled")
+    except Exception as e:
+        await callback.message.answer("❌ Creation of task canceled")
     await callback.answer()

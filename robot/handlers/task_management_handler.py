@@ -359,11 +359,18 @@ async def submit_task(callback: CallbackQuery, state: FSMContext):
         # Ask for mandatory comment
         keyboard = InlineKeyboardBuilder()
         keyboard.button(text="❌ Cancel", callback_data="cancel_submission")
-        await callback.message.edit_text(
-            "💬 Please add commentary to work.\n"
-            "It is neccessary.",
-            reply_markup=keyboard.as_markup()
-        )
+        try:
+            await callback.message.edit_text(
+                "💬 Please add commentary to work.\n"
+                "It is neccessary.",
+                reply_markup=keyboard.as_markup()
+            )
+        except Exception as e:
+            await callback.message.answer(
+                "💬 Please add commentary to work.\n"
+                "It is neccessary.",
+                reply_markup=keyboard.as_markup()
+            )
         await state.set_state(TaskStates.waiting_for_comment)
         await callback.answer()
         logger.info(f"Waiting for comment from user {user_id} for task {task_id}")
@@ -488,7 +495,10 @@ async def review_task(callback: CallbackQuery, state: FSMContext):
         review_keyboard.button(text="❌ Cancel", callback_data=f"cancel_review:{task_id}")
         review_keyboard.adjust(1)
         
-        await callback.message.edit_text(task_info, reply_markup=review_keyboard.as_markup())
+        try:
+            await callback.message.edit_text(task_info, reply_markup=review_keyboard.as_markup())
+        except Exception as e:
+            await callback.message.answer(task_info, reply_markup=review_keyboard.as_markup())
         await callback.answer()
         await state.update_data(task_id=task_id)
         
@@ -542,10 +552,16 @@ async def accept_task_completion(callback: CallbackQuery, state: FSMContext):
                 logger.error(f"Failed to send notification to assignee {assignee.telegram_id}: {e}")
         
         # Update UI for the admin
-        await callback.message.edit_text(
-            f"✅ Task '{task.title}' was confirmed!\n"
-            f"Assignees was notificated about that."
-        )
+        try:
+            await callback.message.edit_text(
+                f"✅ Task '{task.title}' was confirmed!\n"
+                f"Assignees was notificated about that."
+            )
+        except Exception as e:
+            await callback.message.answer(
+                f"✅ Task '{task.title}' was confirmed!\n"
+                f"Assignees was notificated about that."
+            )
         await callback.answer("Task confirmed!")
         logger.info(f"Admin {user_id} accepted task {task_id}")
         
@@ -579,10 +595,16 @@ async def request_task_revision(callback: CallbackQuery, state: FSMContext):
         keyboard.button(text="❌ Cancel", callback_data=f"cancel_review:{task_id}")
         keyboard.adjust(3, 2, 1)
         
-        await callback.message.edit_text(
-            "📅 Choose new deadline date in format MM/DD/YYYY HH:MM",
-            reply_markup=keyboard.as_markup()
-        )
+        try:
+            await callback.message.edit_text(
+                "📅 Choose new deadline date in format MM/DD/YYYY HH:MM",
+                reply_markup=keyboard.as_markup()
+            )
+        except Exception as e:
+            await callback.message.answer(
+                "📅 Choose new deadline date in format MM/DD/YYYY HH:MM",
+                reply_markup=keyboard.as_markup()
+            )
         await state.set_state(TaskStates.waiting_for_new_deadline)
         await callback.answer()
         
@@ -607,10 +629,16 @@ async def set_revision_date_from_button(callback: CallbackQuery, state: FSMConte
         keyboard = InlineKeyboardBuilder()
         keyboard.button(text="❌ Cancel", callback_data=f"cancel_review:{(await state.get_data())['task_id']}")
         
-        await callback.message.edit_text(
-            "💬 Commentary for task (what exactly needs to be reworked):",
-            reply_markup=keyboard.as_markup()
-        )
+        try:
+            await callback.message.edit_text(
+                "💬 Commentary for task (what exactly needs to be reworked):",
+                reply_markup=keyboard.as_markup()
+            )
+        except Exception as e:
+            await callback.message.answer(
+                "💬 Commentary for task (what exactly needs to be reworked):",
+                reply_markup=keyboard.as_markup()
+            )
         await state.set_state(TaskStates.waiting_for_review_decision)
         await callback.answer()
         
@@ -778,7 +806,10 @@ async def handle_task_pagination(callback: CallbackQuery, state: FSMContext):
         text = "📋 All tasks:"
 
     keyboard = await get_task_list_keyboard(tasks, page=page, state=state_)
-    await callback.message.edit_text(text, reply_markup=keyboard)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer(text, reply_markup=keyboard)
     await callback.answer()
 
 
@@ -800,7 +831,10 @@ async def show_user_filter(callback: CallbackQuery, state: FSMContext):
 
     users = await get_active_users()
     keyboard = get_user_filter_keyboard(users)
-    await callback.message.edit_text("👥 Choose user for filtration:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("👥 Choose user for filtration:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("👥 Choose user for filtration:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -814,10 +848,16 @@ async def show_filtered_tasks(callback: CallbackQuery, state: FSMContext):
     filtered_user = await sync_to_async(TelegramUser.objects.get)(telegram_id=user_id)
 
     keyboard = await get_task_list_keyboard(tasks, page=page)
-    await callback.message.edit_text(
-        f"📋 User's tasks {filtered_user.first_name}:",
-        reply_markup=keyboard
-    )
+    try:
+        await callback.message.edit_text(
+            f"📋 User's tasks {filtered_user.first_name}:",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        await callback.message.answer(
+            f"📋 User's tasks {filtered_user.first_name}:",
+            reply_markup=keyboard
+        )
     await callback.answer()
 
 
@@ -826,7 +866,10 @@ async def clear_task_filter(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     tasks = await get_admin_task_list()
     keyboard = await get_task_list_keyboard(tasks)
-    await callback.message.edit_text("📋 All tasks:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("📋 All tasks:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("📋 All tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -844,7 +887,10 @@ async def handle_user_filter_pagination(callback: CallbackQuery, state: FSMConte
 
     users = await get_active_users()
     keyboard = get_user_filter_keyboard(users, page=page)
-    await callback.message.edit_text("👥 Choose user for filtration:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("👥 Choose user for filtration:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("👥 Choose user for filtration:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -858,7 +904,10 @@ async def show_completed_tasks(callback: CallbackQuery, state: FSMContext):
 
     tasks = await get_completed_tasks()
     keyboard = await get_task_list_keyboard(tasks)
-    await callback.message.edit_text("✅ Completed tasks:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("✅ Completed tasks:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("✅ Completed tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -872,7 +921,10 @@ async def show_overdue_tasks(callback: CallbackQuery, state: FSMContext):
 
     tasks = await get_overdue_tasks()
     keyboard = await get_task_list_keyboard(tasks)
-    await callback.message.edit_text("⏰ Overdue tasks:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("⏰ Overdue tasks:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("⏰ Overdue tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -881,7 +933,10 @@ async def show_user_completed_tasks(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
     tasks = await get_user_completed_tasks(user)
     keyboard = await get_task_list_keyboard(tasks)
-    await callback.message.edit_text("✅ My completed tasks:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("✅ My completed tasks:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("✅ My completed tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -890,7 +945,10 @@ async def show_user_overdue_tasks(callback: CallbackQuery, state: FSMContext):
     user, _ = await identify_user(callback.from_user.id)
     tasks = await get_user_overdue_tasks(user)
     keyboard = await get_task_list_keyboard(tasks)
-    await callback.message.edit_text("⏰ My overdue tasks:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("⏰ My overdue tasks:", reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer("⏰ My overdue tasks:", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -933,11 +991,18 @@ async def handle_delete_task(callback: CallbackQuery, state: FSMContext):
         # Return to task list
         tasks = await get_admin_task_list()
         keyboard = await get_task_list_keyboard(tasks)
-        await callback.message.edit_text(
-            f"✅ Task «{task_title}» deleted\n\n"
-            "📋 All tasks:",
-            reply_markup=keyboard
-        )
+        try:
+            await callback.message.edit_text(
+                f"✅ Task «{task_title}» deleted\n\n"
+                "📋 All tasks:",
+                reply_markup=keyboard
+            )
+        except Exception as e:
+            await callback.message.answer(
+                f"✅ Task «{task_title}» deleted\n\n"
+                "📋 All tasks:",
+                reply_markup=keyboard
+            )   
         await callback.answer("Task successfully deleted")
         
     except Exception as e:
@@ -1048,7 +1113,10 @@ async def accept_task(callback: CallbackQuery, state: FSMContext):
 @task_management_router.callback_query(F.data.startswith("cancel_review:"))
 async def cancel_review(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Check canceled")
+    try:
+        await callback.message.edit_text("❌ Check canceled")
+    except Exception as e:
+        await callback.message.answer("❌ Check canceled")
     await callback.answer()
 
 
@@ -1064,7 +1132,10 @@ async def show_submitted_tasks(callback: CallbackQuery, state: FSMContext):
         text = "📤 My tasks on check:"
 
     keyboard = await get_task_list_keyboard(tasks, state="submitted_tasks")
-    await callback.message.edit_text(text, reply_markup=keyboard)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer(text, reply_markup=keyboard)
     await callback.answer()
 
 
@@ -1080,5 +1151,8 @@ async def show_revision_tasks(callback: CallbackQuery, state: FSMContext):
         text = "🔄 My tasks on rework:"
 
     keyboard = await get_task_list_keyboard(tasks, state="revision_tasks")
-    await callback.message.edit_text(text, reply_markup=keyboard)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer(text, reply_markup=keyboard)
     await callback.answer()

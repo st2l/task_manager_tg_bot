@@ -25,7 +25,10 @@ async def handle_back_to_main(callback: CallbackQuery, state: FSMContext):
         keyboard = get_user_keyboard()
     
     # Обновляем сообщение
-    await callback.message.edit_text(text, reply_markup=keyboard)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer(text, reply_markup=keyboard)
     await callback.answer()
 
 @navigation_router.callback_query(F.data == "back_to_tasks")
@@ -43,5 +46,8 @@ async def handle_back_to_tasks(callback: CallbackQuery, state: FSMContext):
         keyboard = get_user_keyboard()
         text = "📋 My tasks:"
     
-    await callback.message.edit_text(text, reply_markup=keyboard)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer(text, reply_markup=keyboard)
     await callback.answer() 

@@ -93,7 +93,10 @@ async def show_reports_menu(callback: CallbackQuery):
     )
     
     keyboard = get_report_keyboard()
-    await callback.message.edit_text(report_text, reply_markup=keyboard)
+    try:
+        await callback.message.edit_text(report_text, reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer(report_text, reply_markup=keyboard)
     await callback.answer()
 
 @report_router.callback_query(F.data == "export_report")

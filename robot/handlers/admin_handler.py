@@ -74,7 +74,10 @@ async def handle_admin_statistics(callback: CallbackQuery):
         )
         
         keyboard = get_admin_statistics_keyboard()
-        await callback.message.edit_text(stats_text, reply_markup=keyboard)
+        try:
+            await callback.message.edit_text(stats_text, reply_markup=keyboard)
+        except Exception as e:
+            await callback.message.answer(stats_text, reply_markup=keyboard)
         await callback.answer()
         logger.info(f"Successfully displayed statistics for admin {user_id}")
         
@@ -99,7 +102,10 @@ async def handle_admin_settings(callback: CallbackQuery):
     )
     
     keyboard = get_admin_settings_keyboard()
-    await callback.message.edit_text(settings_text, reply_markup=keyboard)
+    try:
+        await callback.message.edit_text(settings_text, reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer(settings_text, reply_markup=keyboard)
     await callback.answer()
 
 @sync_to_async
@@ -180,7 +186,10 @@ async def show_user_stats(callback: CallbackQuery, state: FSMContext):
     )
     
     keyboard = get_user_stats_keyboard()
-    await callback.message.edit_text(stats_text, reply_markup=keyboard)
+    try:
+        await callback.message.edit_text(stats_text, reply_markup=keyboard)
+    except Exception as e:
+        await callback.message.answer(stats_text, reply_markup=keyboard)
     await callback.answer()
 
 @admin_router.callback_query(F.data.startswith("users_page:"))
@@ -197,5 +206,9 @@ async def handle_users_pagination(callback: CallbackQuery, state: FSMContext):
     
     users = await get_regular_users()
     keyboard = get_users_list_keyboard(users, page=page)
-    await callback.message.edit_text("👥 Users list:", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text("👥 Users list:", reply_markup=keyboard)
+    except Exception as e:
+        logging.warning(f"Error in handle_users_pagination: {e}")
+        await callback.message.answer("👥 Users list:", reply_markup=keyboard)
     await callback.answer() 
