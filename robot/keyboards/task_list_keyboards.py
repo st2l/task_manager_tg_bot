@@ -46,6 +46,8 @@ async def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=
         if isinstance(task, TaskAssignment):
             task_ass = task
             task = await ajdbakjdbsdjkbasjkdbasjkd(task_ass)
+        else:
+            task_ass = task
         
         status_emoji = "✅" if task.status == 'completed' else "📝"
         if task_ass.status == 'overdue':
