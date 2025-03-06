@@ -90,18 +90,21 @@ async def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=
 
 from robot.models import TelegramUser, TaskAssignment, Task
 
+import logging
 @sync_to_async
 def get_assignment_by_task(task_id: int, user: TelegramUser):
     try:
         return TaskAssignment.objects.get(task_id=task_id, user=user)
-    except TaskAssignment.DoesNotExist:
+    except Exception as e:
+        logging.error(f"Error while getting TaskAssignment for task {task_id} and user {user} -> {e}")
         return False
 
 @sync_to_async
-def get_assignment_for_admin(task_id:int):
+def get_assignment_for_admin(task_id: int):
     try:
         return TaskAssignment.objects.get(task_id=task_id)
-    except TaskAssignment.DoesNotExist:
+    except Exception as e:
+        logging.error(f"Error while getting TaskAssignment for task {task_id} -> {e}")
         return False
     
 
