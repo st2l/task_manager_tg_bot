@@ -111,7 +111,7 @@ def get_assignment_for_admin(task_id: int):
 async def get_task_detail_keyboard(task_id: int, user_is_admin: bool = False, task_status: str = 'open', user: TelegramUser = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
-    if user_is_admin:
+    if not user_is_admin:
         task_ass = await get_assignment_by_task(task_id, user)
     else:
         task_ass = await get_assignment_for_admin(task_id)
