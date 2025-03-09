@@ -699,6 +699,7 @@ async def send_task_to_revision(message: Message, state: FSMContext):
             task_assignments = TaskAssignment.objects.filter(task=task)
             for assignment in task_assignments:
                 assignment.mark_revision(new_deadline)
+                logger.info(f"Marked assignment {assignment.id} for revision")
             
             # Add admin comment
             TaskComment.objects.create(
