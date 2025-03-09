@@ -54,7 +54,7 @@ async def get_task_list_keyboard(tasks, page=1, items_per_page=5, is_open_tasks=
             status_emoji = "⏰"
         elif task_ass.status == 'submitted':
             status_emoji = "📤"
-        elif task_ass.status == 'revision':
+        elif task.status == 'revision':
             status_emoji = "🔄"
             
         builder.button(

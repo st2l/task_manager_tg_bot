@@ -45,12 +45,12 @@ def get_user_tasks(user, state: str = '*'):
     elif state == 'user_submitted_tasks':
         return list(TaskAssignment.objects.filter(
             user=user,
-            status='submitted'
+            task__status='submitted'
         ).select_related('task').order_by('-task__created_at'))
     elif state == 'user_revision_tasks':
         return list(TaskAssignment.objects.filter(
             user=user,
-            status='revision'
+            task__status='revision'
         ).select_related('task').order_by('-task__created_at'))
 
 
