@@ -695,7 +695,7 @@ async def send_task_to_revision(message: Message, state: FSMContext):
         @sync_to_async
         def update_task_for_revision(task_id, new_deadline, admin, comment):
             task = Task.objects.get(id=task_id)
-            task_assignments = TaskAssignment.objects.filter(task=task)
+            task_assignments = TaskAssignment.objects.filter(task_id=task_id)
             task.mark_revision(new_deadline)
             for assignment in task_assignments:
                 assignment.mark_revision(new_deadline)
