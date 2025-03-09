@@ -55,7 +55,7 @@ def seven_days_kb():
     for i in range(1, 7+1):
         next_day = now + timedelta(days=i)
         logging.info(f'next_day -> {next_day}')
-        kb.button(text=f'{next_day.month}/{next_day.day}/{next_day.year} 23:59',
+        kb.button(text=f'{next_day.month}/{next_day.day}/{next_day.year} 11:59 PM',
                   callback_data=f'choose_time_{next_day.month}/{next_day.day}/{next_day.year} 23:59')
     kb.adjust(2)
     return kb.as_markup()
